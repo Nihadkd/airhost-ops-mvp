@@ -18,6 +18,8 @@ export async function POST(req: Request) {
     const kind = String(formData.get("kind") ?? "");
 
     if (!file || !orderId) return apiError(400, "Missing file/orderId");
+    if (file.size > 8 * 1024 * 1024) return apiError(413, "File too large (max 8MB)");
+    if (!file.type.startsWith("image/")) return apiError(400, "Only image files are supported");
 
     const order = await prisma.serviceOrder.findUnique({ where: { id: orderId } });
     if (!order) return apiError(404, "Order not found");

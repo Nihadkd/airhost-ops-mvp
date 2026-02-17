@@ -71,7 +71,8 @@ export function OrderDetailClient({ initialOrder, role, workers }: { initialOrde
     formData.append("orderId", order.id);
     const res = await fetch("/api/images/upload", { method: "POST", body: formData });
     if (!res.ok) {
-      toast.error("Opplasting feilet");
+      const body = (await res.json().catch(() => null)) as { error?: string } | null;
+      toast.error(body?.error ?? "Opplasting feilet");
       return;
     }
     toast.success("Bilde lastet opp");
