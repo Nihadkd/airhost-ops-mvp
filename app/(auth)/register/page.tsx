@@ -9,10 +9,13 @@ import { useLanguage } from "@/lib/language-context";
 export default function RegisterPage() {
   const router = useRouter();
   const [error, setError] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
+  const [loading, setLoading] = useState(false);
   const { lang, setLang, t } = useLanguage();
 
   const submit = async (formData: FormData) => {
     setError("");
+    setLoading(true);
     const payload = {
       name: String(formData.get("name")),
       email: String(formData.get("email")),
@@ -27,6 +30,7 @@ export default function RegisterPage() {
     });
 
     if (!res.ok) {
+      setLoading(false);
       const body = (await res.json().catch(() => null)) as { code?: string; error?: string } | null;
       const reasonByCode: Record<string, string> = {
         EMAIL_EXISTS: t("registerReasonEmailExists"),
@@ -39,7 +43,13 @@ export default function RegisterPage() {
       return;
     }
 
-    await signIn("credentials", { email: payload.email, password: payload.password, redirect: false });
+    const loginRes = await signIn("credentials", { email: payload.email, password: payload.password, redirect: false });
+    if (!loginRes?.ok) {
+      setLoading(false);
+      setError(t("registerAutoLoginFailed"));
+      return;
+    }
+
     router.push("/dashboard");
     router.refresh();
   };
@@ -56,14 +66,21 @@ export default function RegisterPage() {
       <form action={submit} className="mt-4 space-y-3">
         <input className="input" type="text" name="name" placeholder={t("name")} required />
         <input className="input" type="email" name="email" placeholder={t("email")} required />
-        <input className="input" type="password" name="password" placeholder={t("passwordMin")} required />
+        <div className="space-y-2">
+          <input className="input" type={showPassword ? "text" : "password"} name="password" placeholder={t("passwordMin")} required />
+          <button type="button" className="text-sm text-teal-700 underline" onClick={() => setShowPassword((prev) => !prev)}>
+            {showPassword ? t("hidePassword") : t("showPassword")}
+          </button>
+        </div>
         <select className="input" name="role" defaultValue="UTLEIER">
           <option value="UTLEIER">{t("roleLandlordOnly")}</option>
           <option value="TJENESTE">{t("roleWorkerOnly")}</option>
           <option value="BEGGE">{t("roleBoth")}</option>
         </select>
         {error && <p className="text-sm text-red-600">{error}</p>}
-        <button className="btn btn-primary w-full" type="submit">{t("register")}</button>
+        <button className="btn btn-primary w-full" type="submit" disabled={loading}>
+          {loading ? "..." : t("register")}
+        </button>
       </form>
       <p className="mt-3 text-sm">
         {t("alreadyAccount")} <Link href="/login" className="text-teal-700 underline">{t("login")}</Link>

@@ -9,15 +9,28 @@ import { useLanguage } from "@/lib/language-context";
 export default function LoginPage() {
   const router = useRouter();
   const [error, setError] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
+  const [loading, setLoading] = useState(false);
   const { lang, setLang, t } = useLanguage();
 
   const submit = async (formData: FormData) => {
     setError("");
+    setLoading(true);
     const email = String(formData.get("email"));
     const password = String(formData.get("password"));
 
     const res = await signIn("credentials", { email, password, redirect: false });
+    if (!res?.ok) {
+      setLoading(false);
+      if (res?.error === "CredentialsSignin") {
+        setError(t("invalidCredentials"));
+        return;
+      }
+      setError(t("loginUnknownError"));
+      return;
+    }
     if (res?.error) {
+      setLoading(false);
       setError(t("invalidCredentials"));
       return;
     }
@@ -38,9 +51,16 @@ export default function LoginPage() {
       <p className="text-sm text-slate-600">{t("loginSubtitle")}</p>
       <form action={submit} className="mt-4 space-y-3">
         <input className="input" type="email" name="email" placeholder={t("email")} required />
-        <input className="input" type="password" name="password" placeholder={t("password")} required />
+        <div className="space-y-2">
+          <input className="input" type={showPassword ? "text" : "password"} name="password" placeholder={t("password")} required />
+          <button type="button" className="text-sm text-teal-700 underline" onClick={() => setShowPassword((prev) => !prev)}>
+            {showPassword ? t("hidePassword") : t("showPassword")}
+          </button>
+        </div>
         {error && <p className="text-sm text-red-600">{error}</p>}
-        <button className="btn btn-primary w-full" type="submit">{t("login")}</button>
+        <button className="btn btn-primary w-full" type="submit" disabled={loading}>
+          {loading ? "..." : t("login")}
+        </button>
       </form>
       <p className="mt-3 text-sm">
         {t("noAccount")} <Link href="/register" className="text-teal-700 underline">{t("register")}</Link>
