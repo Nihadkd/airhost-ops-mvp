@@ -1,0 +1,7 @@
+.env
+.env.*
+dev.db
+dev-server.log
+tunnel.log
+ssh-tunnel.log
+share.log
