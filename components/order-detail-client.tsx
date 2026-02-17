@@ -51,6 +51,7 @@ export function OrderDetailClient({
   currentUserId: string;
 }) {
   const [order, setOrder] = useState(initialOrder);
+  const [messages, setMessages] = useState<Message[]>(initialOrder.messages ?? []);
   const { t } = useLanguage();
 
   const mapUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(order.address)}`;
@@ -68,16 +69,27 @@ export function OrderDetailClient({
   const refresh = useCallback(async () => {
     const res = await fetch(`/api/orders/${order.id}`, { cache: "no-store" });
     if (!res.ok) return;
-    setOrder(await res.json());
-  }, [order.id]);
+    const nextOrder = (await res.json()) as Order;
+    setOrder(nextOrder);
+    if (isPrivateChatParticipant) {
+      setMessages(nextOrder.messages ?? []);
+    }
+  }, [isPrivateChatParticipant, order.id]);
+
+  const refreshMessages = useCallback(async () => {
+    if (!isPrivateChatParticipant) return;
+    const res = await fetch(`/api/orders/${order.id}/messages`, { cache: "no-store" });
+    if (!res.ok) return;
+    setMessages((await res.json()) as Message[]);
+  }, [isPrivateChatParticipant, order.id]);
 
   useEffect(() => {
     if (!isPrivateChatParticipant) return;
     const timer = setInterval(() => {
-      void refresh();
+      void refreshMessages();
     }, 8000);
     return () => clearInterval(timer);
-  }, [isPrivateChatParticipant, refresh]);
+  }, [isPrivateChatParticipant, refreshMessages]);
 
   const updateStatus = async (status: string) => {
     const res = await fetch(`/api/orders/${order.id}`, {
@@ -150,7 +162,7 @@ export function OrderDetailClient({
       return;
     }
 
-    await refresh();
+    await refreshMessages();
   };
 
   return (
@@ -229,8 +241,8 @@ export function OrderDetailClient({
             <span className="text-xs text-slate-500">Kun mellom utleier og tjenesteutfører</span>
           </div>
           <div className="max-h-72 space-y-2 overflow-y-auto rounded border border-slate-200 bg-white p-3">
-            {order.messages.length === 0 && <p className="text-sm text-slate-500">Ingen meldinger ennå.</p>}
-            {order.messages.map((msg) => (
+            {messages.length === 0 && <p className="text-sm text-slate-500">Ingen meldinger ennå.</p>}
+            {messages.map((msg) => (
               <div key={msg.id} className={`rounded-lg p-2 text-sm ${msg.senderId === currentUserId ? "bg-teal-50" : "bg-slate-100"}`}>
                 <p className="font-medium">{msg.sender.name}</p>
                 <p>{msg.text}</p>
@@ -276,7 +288,14 @@ export function OrderDetailClient({
       <div className="grid gap-4 md:grid-cols-2">
         {order.images.map((image) => (
           <div key={image.id} className="panel p-4">
-            <Image src={image.url} alt="order" width={800} height={500} className="h-56 w-full rounded object-cover" />
+            <Image
+              src={image.url}
+              alt="order"
+              width={800}
+              height={500}
+              unoptimized={image.url.startsWith("data:")}
+              className="h-56 w-full rounded object-cover"
+            />
             <p className="mt-2 text-xs uppercase text-slate-500">{image.kind ?? "bilde"}</p>
             <p className="text-sm">{image.caption}</p>
             <div className="mt-2 space-y-2 text-sm">

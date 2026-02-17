@@ -35,7 +35,9 @@ export async function GET(_: Request, { params }: { params: Promise<{ id: string
       },
     });
 
-    return NextResponse.json(messages);
+    return NextResponse.json(messages, {
+      headers: { "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0" },
+    });
   } catch (error) {
     return handleApiError(error);
   }
