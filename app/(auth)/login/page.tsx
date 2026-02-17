@@ -16,27 +16,40 @@ export default function LoginPage() {
   const submit = async (formData: FormData) => {
     setError("");
     setLoading(true);
-    const email = String(formData.get("email"));
-    const password = String(formData.get("password"));
+    try {
+      const email = String(formData.get("email"));
+      const password = String(formData.get("password"));
 
-    const res = await signIn("credentials", { email, password, redirect: false });
-    if (!res?.ok) {
-      setLoading(false);
-      if (res?.error === "CredentialsSignin") {
+      const res = await signIn("credentials", { email, password, redirect: false });
+      if (!res?.ok) {
+        setLoading(false);
+        if (res?.error === "CredentialsSignin") {
+          setError(t("invalidCredentials"));
+          return;
+        }
+        setError(t("loginUnknownError"));
+        return;
+      }
+      if (res?.error) {
+        setLoading(false);
         setError(t("invalidCredentials"));
         return;
       }
-      setError(t("loginUnknownError"));
-      return;
-    }
-    if (res?.error) {
-      setLoading(false);
-      setError(t("invalidCredentials"));
-      return;
-    }
 
-    router.push("/dashboard");
-    router.refresh();
+      const sessionRes = await fetch("/api/auth/session", { cache: "no-store" });
+      const session = sessionRes.ok ? ((await sessionRes.json()) as { user?: { id?: string } | null }) : null;
+      if (!session?.user?.id) {
+        setLoading(false);
+        setError(t("loginSessionError"));
+        return;
+      }
+
+      router.push("/dashboard");
+      router.refresh();
+    } catch {
+      setLoading(false);
+      setError(t("loginUnknownError"));
+    }
   };
 
   return (
