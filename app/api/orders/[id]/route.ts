@@ -28,10 +28,17 @@ export async function GET(_: Request, { params }: { params: Promise<{ id: string
         assignedTo: { select: { id: true, name: true, email: true } },
         images: {
           include: {
-            uploadedBy: { select: { id: true, name: true } },
+            uploadedBy: { select: { id: true, name: true, role: true } },
             comments: { include: { user: { select: { id: true, name: true, role: true } } }, orderBy: { createdAt: "asc" } },
           },
           orderBy: { createdAt: "desc" },
+        },
+        messages: {
+          include: {
+            sender: { select: { id: true, name: true, role: true } },
+            recipient: { select: { id: true, name: true, role: true } },
+          },
+          orderBy: { createdAt: "asc" },
         },
       },
     });

@@ -59,3 +59,7 @@ export const notificationCreateSchema = z.object({
   userId: z.string().min(1),
   message: z.string().min(1).max(240),
 });
+
+export const messageCreateSchema = z.object({
+  text: z.string().min(1).max(1000),
+});

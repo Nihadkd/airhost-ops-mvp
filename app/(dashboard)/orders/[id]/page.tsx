@@ -14,12 +14,20 @@ export default async function OrderDetailsPage({ params }: { params: Promise<{ i
       assignedTo: { select: { id: true, name: true, email: true } },
       images: {
         include: {
+          uploadedBy: { select: { id: true, name: true, role: true } },
           comments: {
             include: { user: { select: { id: true, name: true, role: true } } },
             orderBy: { createdAt: "asc" },
           },
         },
         orderBy: { createdAt: "desc" },
+      },
+      messages: {
+        include: {
+          sender: { select: { id: true, name: true, role: true } },
+          recipient: { select: { id: true, name: true, role: true } },
+        },
+        orderBy: { createdAt: "asc" },
       },
     },
   });
@@ -43,5 +51,5 @@ export default async function OrderDetailsPage({ params }: { params: Promise<{ i
       ? await prisma.user.findMany({ where: { canService: true, isActive: true }, select: { id: true, name: true, role: true } })
       : [];
 
-  return <OrderDetailClient initialOrder={order} role={role} workers={workers} />;
+  return <OrderDetailClient initialOrder={order} role={role} workers={workers} currentUserId={session.user.id} />;
 }

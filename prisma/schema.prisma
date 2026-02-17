@@ -47,6 +47,8 @@ model User {
   images            Image[]
   comments          Comment[]
   notifications     Notification[]
+  sentMessages      Message[]      @relation("MessageSender")
+  receivedMessages  Message[]      @relation("MessageRecipient")
 }
 
 model ServiceOrder {
@@ -63,6 +65,7 @@ model ServiceOrder {
   landlord      User         @relation("LandlordOrders", fields: [landlordId], references: [id])
   assignedTo    User?        @relation("AssignedOrders", fields: [assignedToId], references: [id])
   images        Image[]
+  messages      Message[]
   paymentIntent String?
 }
 
@@ -96,4 +99,16 @@ model Notification {
   isRead    Boolean  @default(false)
   createdAt DateTime @default(now())
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Message {
+  id          String       @id @default(cuid())
+  text        String
+  orderId     String
+  senderId    String
+  recipientId String
+  createdAt   DateTime     @default(now())
+  order       ServiceOrder @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  sender      User         @relation("MessageSender", fields: [senderId], references: [id])
+  recipient   User         @relation("MessageRecipient", fields: [recipientId], references: [id])
 }
