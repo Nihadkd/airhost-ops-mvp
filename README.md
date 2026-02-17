@@ -1,36 +1,75 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# AirHost Ops MVP (Next.js + Prisma)
 
-## Getting Started
+Produksjonsklar MVP v1 for intern drift av Airbnb-tjenester.
 
-First, run the development server:
+## Stack
+- Next.js (App Router) + TypeScript
+- TailwindCSS
+- Prisma ORM
+- SQLite (lokal dev), kan byttes til PostgreSQL
+- NextAuth (Credentials + JWT session)
+- Zustand (popup-varsler)
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+## Roller
+- `UTLEIER`
+- `TJENESTE`
+- `ADMIN`
+
+RBAC er implementert i API-ruter, middleware og UI.
+
+## Funksjoner
+- Auth: registrering, innlogging, JWT session
+- Oppdrag: full CRUD + tildeling
+- Bilder: opplasting (lokal lagring) + CRUD
+- Kommentarer: CRUD på bilder
+- Varsler: popup ved neste login + markering som lest
+- Admin: brukerstyring (opprett/deaktiver/rolle), dashboard-statistikk
+- Seed-data for testbrukere
+
+## Prosjektstruktur
+- `app/api/*` API-ruter
+- `app/(auth)/*` auth-sider
+- `app/(dashboard)/*` rollebaserte dashboard-sider
+- `components/*` UI-komponenter
+- `lib/*` auth, prisma, rbac, validering, upload
+- `prisma/schema.prisma` datamodeller
+- `prisma/seed.cjs` seed data
+- `tests/api/*` endpoint-tester
+
+## Miljovariabler
+Kopier `.env.example` til `.env`.
+
+```env
+DATABASE_URL="file:./dev.db"
+NEXTAUTH_SECRET="replace-with-strong-secret"
+NEXTAUTH_URL="http://localhost:3000"
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## Kjoring lokalt
+```bash
+npm install
+npx prisma migrate dev
+npm run db:seed
+npm run dev
+```
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Test
+```bash
+npm run test
+```
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## Prod
+```bash
+npm run build
+npm run start
+```
 
-## Learn More
+## Seed brukere
+- Admin: `admin@airhost.no` / `Admin123!`
+- Utleier: `utleier@airhost.no` / `Utleier123!`
+- Tjeneste: `tjeneste@airhost.no` / `Tjeneste123!`
 
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## Videre skalering
+- `lib/payments/provider.ts` klargjort for betaling-integrasjon
+- Bytt til PostgreSQL ved a oppdatere `datasource db` i `prisma/schema.prisma`
+- Bytt bildeflyt til Cloudinary ved a erstatte `lib/upload.ts`

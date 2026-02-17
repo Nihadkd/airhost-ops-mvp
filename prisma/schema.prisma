@@ -1,0 +1,98 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  ADMIN
+  UTLEIER
+  TJENESTE
+}
+
+enum ProfileMode {
+  UTLEIER
+  TJENESTE
+}
+
+enum ServiceType {
+  CLEANING
+  KEY_HANDLING
+}
+
+enum OrderStatus {
+  PENDING
+  IN_PROGRESS
+  COMPLETED
+}
+
+model User {
+  id                String         @id @default(cuid())
+  name              String
+  email             String         @unique
+  password          String
+  role              Role           @default(UTLEIER)
+  canLandlord       Boolean        @default(true)
+  canService        Boolean        @default(false)
+  activeMode        ProfileMode    @default(UTLEIER)
+  isActive          Boolean        @default(true)
+  createdAt         DateTime       @default(now())
+  updatedAt         DateTime       @updatedAt
+  landlordOrders    ServiceOrder[] @relation("LandlordOrders")
+  assignedOrders    ServiceOrder[] @relation("AssignedOrders")
+  images            Image[]
+  comments          Comment[]
+  notifications     Notification[]
+}
+
+model ServiceOrder {
+  id            String       @id @default(cuid())
+  type          ServiceType
+  address       String
+  date          DateTime
+  status        OrderStatus  @default(PENDING)
+  note          String?
+  landlordId    String
+  assignedToId  String?
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+  landlord      User         @relation("LandlordOrders", fields: [landlordId], references: [id])
+  assignedTo    User?        @relation("AssignedOrders", fields: [assignedToId], references: [id])
+  images        Image[]
+  paymentIntent String?
+}
+
+model Image {
+  id           String       @id @default(cuid())
+  url          String
+  caption      String?
+  kind         String?
+  orderId      String
+  uploadedById String
+  createdAt    DateTime     @default(now())
+  order        ServiceOrder @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  uploadedBy   User         @relation(fields: [uploadedById], references: [id])
+  comments     Comment[]
+}
+
+model Comment {
+  id        String   @id @default(cuid())
+  text      String
+  imageId   String
+  userId    String
+  createdAt DateTime @default(now())
+  image     Image    @relation(fields: [imageId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id])
+}
+
+model Notification {
+  id        String   @id @default(cuid())
+  message   String
+  userId    String
+  isRead    Boolean  @default(false)
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}

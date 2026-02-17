@@ -1,26 +1,49 @@
 {
-  "name": "nextjs-saas-v1",
-  "version": "0.1.0",
-  "private": true,
-  "scripts": {
-    "dev": "next dev",
-    "build": "next build",
-    "start": "next start",
-    "lint": "eslint"
-  },
-  "dependencies": {
-    "next": "16.1.6",
-    "react": "19.2.3",
-    "react-dom": "19.2.3"
-  },
-  "devDependencies": {
-    "@tailwindcss/postcss": "^4",
-    "@types/node": "^20",
-    "@types/react": "^19",
-    "@types/react-dom": "^19",
-    "eslint": "^9",
-    "eslint-config-next": "16.1.6",
-    "tailwindcss": "^4",
-    "typescript": "^5"
-  }
+    "name":  "airhost-ops-mvp",
+    "version":  "1.0.0",
+    "private":  true,
+    "scripts":  {
+                    "dev":  "next dev",
+                    "build":  "next build",
+                    "start":  "next start",
+                    "lint":  "eslint .",
+                    "typecheck":  "tsc --noEmit",
+                    "test":  "vitest run",
+                    "test:watch":  "vitest",
+                    "db:generate":  "prisma generate",
+                    "db:migrate":  "prisma migrate dev",
+                    "db:seed":  "prisma db seed",
+                    "setup":  "npm install \u0026\u0026 npx prisma migrate dev \u0026\u0026 npm run db:seed",
+                    "verify":  "npm run test \u0026\u0026 npm run lint \u0026\u0026 npm run typecheck \u0026\u0026 npm run build",
+                    "autopilot":  "powershell -ExecutionPolicy Bypass -File ./scripts/autopilot.ps1",
+                    "share":  "lt --port 3000"
+                },
+    "prisma":  {
+                   "seed":  "node prisma/seed.cjs"
+               },
+    "dependencies":  {
+                         "@prisma/client":  "^6.19.2",
+                         "bcryptjs":  "^3.0.2",
+                         "next":  "16.1.6",
+                         "next-auth":  "^5.0.0-beta.30",
+                         "prisma":  "^6.19.2",
+                         "react":  "19.2.3",
+                         "react-dom":  "19.2.3",
+                         "react-hot-toast":  "^2.6.0",
+                         "zod":  "^4.1.11",
+                         "zustand":  "^5.0.8"
+                     },
+    "devDependencies":  {
+                            "@tailwindcss/postcss":  "^4",
+                            "@types/node":  "^20",
+                            "@types/react":  "^19",
+                            "@types/react-dom":  "^19",
+                            "@vitest/coverage-v8":  "^4.0.18",
+                            "eslint":  "^9",
+                            "eslint-config-next":  "16.1.6",
+                            "localtunnel":  "^2.0.2",
+                            "tailwindcss":  "^4",
+                            "typescript":  "^5",
+                            "vitest":  "^4.0.18"
+                        }
 }

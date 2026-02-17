@@ -1,26 +1,47 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
-
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+  --bg: #f3f6f8;
+  --surface: #ffffff;
+  --ink: #12303d;
+  --muted: #5f7683;
+  --accent: #0b8f7b;
+  --danger: #c24848;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: radial-gradient(circle at 15% 10%, #d9eef2 0%, #f3f6f8 50%, #edf3f5 100%);
+  color: var(--ink);
+  font-family: "Manrope", "Segoe UI", sans-serif;
 }
+
+.panel {
+  background: var(--surface);
+  border: 1px solid #d3e0e6;
+  border-radius: 16px;
+  box-shadow: 0 12px 28px rgba(18, 48, 61, 0.06);
+}
+
+.badge { border-radius: 999px; padding: 0.25rem 0.7rem; font-size: 0.75rem; font-weight: 700; }
+.badge-pending { background: #fff3cd; color: #7a5b00; }
+.badge-progress { background: #d8efff; color: #175785; }
+.badge-completed { background: #dcfce7; color: #166534; }
+
+.input {
+  width: 100%;
+  border: 1px solid #c6d4dc;
+  border-radius: 10px;
+  background: #fff;
+  padding: 0.65rem 0.8rem;
+}
+
+.btn {
+  border-radius: 10px;
+  padding: 0.6rem 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.btn-primary { background: var(--accent); color: white; }
+.btn-secondary { background: #e8f0f4; color: #154052; }
+.btn-danger { background: var(--danger); color: white; }
