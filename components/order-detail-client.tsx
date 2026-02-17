@@ -52,6 +52,7 @@ export function OrderDetailClient({
 }) {
   const [order, setOrder] = useState(initialOrder);
   const [messages, setMessages] = useState<Message[]>(initialOrder.messages ?? []);
+  const [chatOpen, setChatOpen] = useState(false);
   const { t } = useLanguage();
 
   const mapUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(order.address)}`;
@@ -165,6 +166,29 @@ export function OrderDetailClient({
     await refreshMessages();
   };
 
+  const chatContent = (
+    <>
+      <div className="mb-3 flex items-center justify-between">
+        <h2 className="text-lg font-semibold">Privat chat</h2>
+        <span className="text-xs text-slate-500">Kun mellom utleier og tjenesteutfører</span>
+      </div>
+      <div className="max-h-72 space-y-2 overflow-y-auto rounded border border-slate-200 bg-white p-3">
+        {messages.length === 0 && <p className="text-sm text-slate-500">Ingen meldinger ennå.</p>}
+        {messages.map((msg) => (
+          <div key={msg.id} className={`rounded-lg p-2 text-sm ${msg.senderId === currentUserId ? "bg-teal-50" : "bg-slate-100"}`}>
+            <p className="font-medium">{msg.sender.name}</p>
+            <p>{msg.text}</p>
+            <p className="mt-1 text-xs text-slate-500">{new Date(msg.createdAt).toLocaleString("nb-NO", { hour12: false })}</p>
+          </div>
+        ))}
+      </div>
+      <form action={sendMessage} className="mt-3 flex gap-2">
+        <input className="input" name="text" placeholder="Skriv melding" required />
+        <button className="btn btn-primary">Send</button>
+      </form>
+    </>
+  );
+
   return (
     <div className="space-y-4">
       <div className="panel p-4 sm:p-5">
@@ -235,26 +259,7 @@ export function OrderDetailClient({
       </div>
 
       {isPrivateChatParticipant && (
-        <section className="panel p-4 sm:p-5">
-          <div className="mb-3 flex items-center justify-between">
-            <h2 className="text-lg font-semibold">Privat chat</h2>
-            <span className="text-xs text-slate-500">Kun mellom utleier og tjenesteutfører</span>
-          </div>
-          <div className="max-h-72 space-y-2 overflow-y-auto rounded border border-slate-200 bg-white p-3">
-            {messages.length === 0 && <p className="text-sm text-slate-500">Ingen meldinger ennå.</p>}
-            {messages.map((msg) => (
-              <div key={msg.id} className={`rounded-lg p-2 text-sm ${msg.senderId === currentUserId ? "bg-teal-50" : "bg-slate-100"}`}>
-                <p className="font-medium">{msg.sender.name}</p>
-                <p>{msg.text}</p>
-                <p className="mt-1 text-xs text-slate-500">{new Date(msg.createdAt).toLocaleString("nb-NO", { hour12: false })}</p>
-              </div>
-            ))}
-          </div>
-          <form action={sendMessage} className="mt-3 flex gap-2">
-            <input className="input" name="text" placeholder="Skriv melding" required />
-            <button className="btn btn-primary">Send</button>
-          </form>
-        </section>
+        <section className="panel hidden p-4 sm:block sm:p-5">{chatContent}</section>
       )}
 
       {(role === "TJENESTE" || role === "ADMIN") && (
@@ -313,6 +318,32 @@ export function OrderDetailClient({
           </div>
         ))}
       </div>
+
+      {isPrivateChatParticipant && (
+        <>
+          <button
+            type="button"
+            onClick={() => setChatOpen(true)}
+            className="fixed bottom-5 right-5 z-40 rounded-full bg-teal-700 px-4 py-3 text-sm font-semibold text-white shadow-lg sm:hidden"
+          >
+            Chat
+          </button>
+
+          {chatOpen && (
+            <div className="fixed inset-0 z-50 flex items-end bg-black/30 sm:hidden">
+              <div className="max-h-[82vh] w-full rounded-t-2xl bg-white p-4">
+                <div className="mb-3 flex items-center justify-between">
+                  <h3 className="font-semibold">Chat</h3>
+                  <button type="button" className="text-sm text-slate-600 underline" onClick={() => setChatOpen(false)}>
+                    Lukk
+                  </button>
+                </div>
+                {chatContent}
+              </div>
+            </div>
+          )}
+        </>
+      )}
     </div>
   );
 }
