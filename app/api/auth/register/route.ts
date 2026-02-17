@@ -1,6 +1,7 @@
 import bcrypt from "bcryptjs";
 import { NextResponse } from "next/server";
 import { ProfileMode, Role } from "@prisma/client";
+import { ZodError } from "zod";
 import { prisma } from "@/lib/prisma";
 import { registerSchema } from "@/lib/validators";
 
@@ -43,7 +44,13 @@ export async function POST(req: Request) {
     });
 
     return NextResponse.json(user, { status: 201 });
-  } catch {
-    return NextResponse.json({ error: "Invalid payload" }, { status: 400 });
+  } catch (error) {
+    if (error instanceof ZodError) {
+      return NextResponse.json({ error: "Invalid payload" }, { status: 400 });
+    }
+
+    const message = error instanceof Error ? error.message : "Unknown error";
+    console.error("register_error", message);
+    return NextResponse.json({ error: "Registration failed" }, { status: 500 });
   }
 }
