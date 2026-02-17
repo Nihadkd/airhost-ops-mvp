@@ -48,3 +48,5 @@ dev-server.log
 tunnel.log
 ssh-tunnel.log
 share.log
+
+.vercel

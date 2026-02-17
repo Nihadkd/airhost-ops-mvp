@@ -58,6 +58,19 @@ npm run dev
 npm run test
 ```
 
+## Full verifisering (anbefalt før deploy)
+Kjorer:
+- database reset + seed
+- tester
+- lint
+- typecheck
+- build
+- live smoke-test av `api/health` og brukerregistrering
+
+```bash
+npm run verify:all
+```
+
 ## Prod
 ```bash
 npm run build

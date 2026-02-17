@@ -1,6 +1,6 @@
 import bcrypt from "bcryptjs";
 import { NextResponse } from "next/server";
-import { ProfileMode, Role } from "@prisma/client";
+import { Prisma, ProfileMode, Role } from "@prisma/client";
 import { ZodError } from "zod";
 import { prisma } from "@/lib/prisma";
 import { registerSchema } from "@/lib/validators";
@@ -12,7 +12,7 @@ export async function POST(req: Request) {
 
     const exists = await prisma.user.findUnique({ where: { email: data.email } });
     if (exists) {
-      return NextResponse.json({ error: "Email already exists" }, { status: 409 });
+      return NextResponse.json({ code: "EMAIL_EXISTS", error: "Email already exists" }, { status: 409 });
     }
 
     const password = await bcrypt.hash(data.password, 10);
@@ -46,11 +46,28 @@ export async function POST(req: Request) {
     return NextResponse.json(user, { status: 201 });
   } catch (error) {
     if (error instanceof ZodError) {
-      return NextResponse.json({ error: "Invalid payload" }, { status: 400 });
+      return NextResponse.json({ code: "INVALID_PAYLOAD", error: "Invalid payload" }, { status: 400 });
+    }
+
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
+      return NextResponse.json({ code: "EMAIL_EXISTS", error: "Email already exists" }, { status: 409 });
+    }
+
+    if (
+      error instanceof Prisma.PrismaClientInitializationError ||
+      (error instanceof Error &&
+        (error.message.includes("Unable to open the database file") ||
+          error.message.includes("Can't reach database server")))
+    ) {
+      console.error("register_error", error instanceof Error ? error.message : "Database unavailable");
+      return NextResponse.json(
+        { code: "DB_UNAVAILABLE", error: "Registration is unavailable because database is not reachable" },
+        { status: 503 },
+      );
     }
 
     const message = error instanceof Error ? error.message : "Unknown error";
     console.error("register_error", message);
-    return NextResponse.json({ error: "Registration failed" }, { status: 500 });
+    return NextResponse.json({ code: "REGISTER_FAILED", error: "Registration failed" }, { status: 500 });
   }
 }

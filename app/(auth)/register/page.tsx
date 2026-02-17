@@ -27,7 +27,15 @@ export default function RegisterPage() {
     });
 
     if (!res.ok) {
-      setError(t("cannotRegister"));
+      const body = (await res.json().catch(() => null)) as { code?: string; error?: string } | null;
+      const reasonByCode: Record<string, string> = {
+        EMAIL_EXISTS: t("registerReasonEmailExists"),
+        INVALID_PAYLOAD: t("registerReasonInvalidPayload"),
+        DB_UNAVAILABLE: t("registerReasonDbUnavailable"),
+        REGISTER_FAILED: t("registerReasonUnknown"),
+      };
+
+      setError(reasonByCode[body?.code ?? ""] ?? t("cannotRegister"));
       return;
     }
 
