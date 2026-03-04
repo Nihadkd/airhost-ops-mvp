@@ -3,6 +3,8 @@ import { prisma } from "@/lib/prisma";
 import { requireRole } from "@/lib/rbac";
 import { apiError, handleApiError } from "@/lib/api";
 import { assignSchema } from "@/lib/validators";
+import { sendPushToUser } from "@/lib/push";
+import { sendAssignedOrderSms } from "@/lib/sms";
 
 export async function PUT(req: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
@@ -12,18 +14,32 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
     const data = assignSchema.parse(body);
 
     const worker = await prisma.user.findUnique({ where: { id: data.assignedToId } });
-    if (!worker || worker.role !== "TJENESTE") return apiError(400, "Worker not found");
+    if (!worker || !worker.isActive || !worker.canService) return apiError(400, "Worker not found");
 
     const order = await prisma.serviceOrder.update({
       where: { id },
-      data: { assignedToId: data.assignedToId, status: "IN_PROGRESS" },
+      data: { assignedToId: data.assignedToId, status: "PENDING" },
     });
 
     await prisma.notification.create({
       data: {
         userId: data.assignedToId,
         message: `Nytt oppdrag tildelt: ${order.address}`,
+        targetUrl: `/orders/${id}`,
       },
+    });
+
+    await sendPushToUser(data.assignedToId, {
+      title: "Nytt oppdrag tildelt",
+      body: `Du har fått et nytt oppdrag: ${order.address}`,
+      data: { orderId: id, type: "order_assigned", path: `/orders/${id}` },
+    });
+
+    await sendAssignedOrderSms({
+      workerPhone: worker.phone,
+      orderId: String(order.orderNumber),
+      address: order.address,
+      date: order.date,
     });
 
     return NextResponse.json(order);

@@ -2,16 +2,24 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { signIn } from "next-auth/react";
-import { useState } from "react";
+import { signIn, useSession } from "next-auth/react";
+import { useEffect, useState } from "react";
 import { useLanguage } from "@/lib/language-context";
+import { toUserErrorMessage } from "@/lib/client-error";
 
 export default function RegisterPage() {
   const router = useRouter();
+  const { status } = useSession();
   const [error, setError] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const { lang, setLang, t } = useLanguage();
+
+  useEffect(() => {
+    if (status === "authenticated") {
+      router.replace("/dashboard");
+    }
+  }, [router, status]);
 
   const submit = async (formData: FormData) => {
     setError("");
@@ -19,6 +27,7 @@ export default function RegisterPage() {
     const payload = {
       name: String(formData.get("name")),
       email: String(formData.get("email")),
+      phone: String(formData.get("phone")),
       password: String(formData.get("password")),
       role: String(formData.get("role") || "UTLEIER"),
     };
@@ -31,15 +40,7 @@ export default function RegisterPage() {
 
     if (!res.ok) {
       setLoading(false);
-      const body = (await res.json().catch(() => null)) as { code?: string; error?: string } | null;
-      const reasonByCode: Record<string, string> = {
-        EMAIL_EXISTS: t("registerReasonEmailExists"),
-        INVALID_PAYLOAD: t("registerReasonInvalidPayload"),
-        DB_UNAVAILABLE: t("registerReasonDbUnavailable"),
-        REGISTER_FAILED: t("registerReasonUnknown"),
-      };
-
-      setError(reasonByCode[body?.code ?? ""] ?? t("cannotRegister"));
+      setError(await toUserErrorMessage(res, t, "cannotRegister"));
       return;
     }
 
@@ -51,7 +52,6 @@ export default function RegisterPage() {
     }
 
     router.push("/dashboard");
-    router.refresh();
   };
 
   return (
@@ -66,6 +66,7 @@ export default function RegisterPage() {
       <form action={submit} className="mt-4 space-y-3">
         <input className="input" type="text" name="name" placeholder={t("name")} required />
         <input className="input" type="email" name="email" placeholder={t("email")} required />
+        <input className="input" type="tel" name="phone" placeholder={t("phone")} required />
         <div className="space-y-2">
           <input className="input" type={showPassword ? "text" : "password"} name="password" placeholder={t("passwordMin")} required />
           <button type="button" className="text-sm text-teal-700 underline" onClick={() => setShowPassword((prev) => !prev)}>
@@ -84,6 +85,11 @@ export default function RegisterPage() {
       </form>
       <p className="mt-3 text-sm">
         {t("alreadyAccount")} <Link href="/login" className="text-teal-700 underline">{t("login")}</Link>
+      </p>
+      <p className="mt-2 text-xs text-slate-500">
+        <Link href="/privacy" className="underline">Personvern</Link> ·{" "}
+        <Link href="/terms" className="underline">Vilkår</Link> ·{" "}
+        <Link href="/support" className="underline">Support</Link>
       </p>
     </main>
   );

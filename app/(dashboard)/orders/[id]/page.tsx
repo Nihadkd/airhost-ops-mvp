@@ -1,5 +1,6 @@
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { getStartAvailabilityForWorker } from "@/lib/services/order-start-service";
 import { resolveUserRole } from "@/lib/user-role";
 import { OrderDetailClient } from "@/components/order-detail-client";
 
@@ -11,7 +12,7 @@ export default async function OrderDetailsPage({ params }: { params: Promise<{ i
     where: { id },
     include: {
       landlord: { select: { id: true, name: true, email: true } },
-      assignedTo: { select: { id: true, name: true, email: true } },
+      assignedTo: { select: { id: true, name: true, email: true, reviewsReceived: { select: { rating: true } } } },
       images: {
         include: {
           uploadedBy: { select: { id: true, name: true, role: true } },
@@ -22,13 +23,6 @@ export default async function OrderDetailsPage({ params }: { params: Promise<{ i
         },
         orderBy: { createdAt: "desc" },
       },
-      messages: {
-        include: {
-          sender: { select: { id: true, name: true, role: true } },
-          recipient: { select: { id: true, name: true, role: true } },
-        },
-        orderBy: { createdAt: "asc" },
-      },
     },
   });
 
@@ -38,8 +32,10 @@ export default async function OrderDetailsPage({ params }: { params: Promise<{ i
 
   const resolved = await resolveUserRole(session.user.id);
   const role = resolved.role;
+  const isAdminAccount = session.user.role === "ADMIN";
 
   const allowed =
+    isAdminAccount ||
     role === "ADMIN" ||
     (role === "UTLEIER" && order.landlordId === session.user.id) ||
     (role === "TJENESTE" && (order.assignedToId === session.user.id || (!order.assignedToId && order.status === "PENDING")));
@@ -47,9 +43,43 @@ export default async function OrderDetailsPage({ params }: { params: Promise<{ i
   if (!allowed) return <div className="panel p-5">Ingen tilgang.</div>;
 
   const workers =
-    role === "ADMIN"
-      ? await prisma.user.findMany({ where: { canService: true, isActive: true }, select: { id: true, name: true, role: true } })
+    isAdminAccount || role === "ADMIN"
+      ? await prisma.user.findMany({
+          where: { canService: true, isActive: true },
+          select: { id: true, name: true, role: true, reviewsReceived: { select: { rating: true } } },
+        })
       : [];
 
-  return <OrderDetailClient initialOrder={order} role={role} workers={workers} currentUserId={session.user.id} />;
+  const withRating = <T extends { reviewsReceived: Array<{ rating: number }> }>(user: T) => {
+    const reviewCount = user.reviewsReceived.length;
+    const averageRating = reviewCount
+      ? Number((user.reviewsReceived.reduce((sum, review) => sum + review.rating, 0) / reviewCount).toFixed(1))
+      : null;
+    return { ...user, averageRating, reviewCount };
+  };
+
+  const orderWithRating = {
+    ...order,
+    assignedTo: order.assignedTo ? withRating(order.assignedTo) : null,
+  };
+  const startAvailability =
+    role === "TJENESTE" && order.assignedToId === session.user.id
+      ? await getStartAvailabilityForWorker(order.id, session.user.id)
+      : { canStart: false, blockedByOrderId: null, blockedByOrderNumber: null };
+  const workersWithRating = workers.map(withRating);
+
+  return (
+    <OrderDetailClient
+      initialOrder={{
+        ...orderWithRating,
+        messages: [],
+        canStart: startAvailability.canStart,
+        startBlockedByOrderId: startAvailability.blockedByOrderId,
+        startBlockedByOrderNumber: startAvailability.blockedByOrderNumber,
+      }}
+      role={isAdminAccount ? "ADMIN" : role}
+      workers={workersWithRating}
+      currentUserId={session.user.id}
+    />
+  );
 }

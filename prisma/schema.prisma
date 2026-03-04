@@ -34,11 +34,13 @@ model User {
   id                String         @id @default(cuid())
   name              String
   email             String         @unique
+  phone             String?
   password          String
   role              Role           @default(UTLEIER)
   canLandlord       Boolean        @default(true)
   canService        Boolean        @default(false)
   activeMode        ProfileMode    @default(UTLEIER)
+  mobileNotifications Boolean      @default(true)
   isActive          Boolean        @default(true)
   createdAt         DateTime       @default(now())
   updatedAt         DateTime       @updatedAt
@@ -47,17 +49,39 @@ model User {
   images            Image[]
   comments          Comment[]
   notifications     Notification[]
+  pushTokens        PushDeviceToken[]
+  notificationsFromMe Notification[] @relation("NotificationActor")
   sentMessages      Message[]      @relation("MessageSender")
   receivedMessages  Message[]      @relation("MessageRecipient")
+  reviewsWritten    Review[]       @relation("ReviewAuthor")
+  reviewsReceived   Review[]       @relation("ReviewWorker")
+}
+
+model PushDeviceToken {
+  id         String   @id @default(cuid())
+  userId     String
+  token      String   @unique
+  platform   String?
+  deviceName String?
+  isActive   Boolean  @default(true)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, isActive])
 }
 
 model ServiceOrder {
   id            String       @id @default(cuid())
+  orderNumber   Int          @unique @default(autoincrement())
   type          ServiceType
   address       String
   date          DateTime
   status        OrderStatus  @default(PENDING)
   note          String?
+  guestCount    Int?
+  completionNote String?
+  completionChecklist Json?
   landlordId    String
   assignedToId  String?
   createdAt     DateTime     @default(now())
@@ -67,6 +91,33 @@ model ServiceOrder {
   images        Image[]
   messages      Message[]
   paymentIntent String?
+  receipt       Receipt?
+
+  @@index([landlordId, type, address, date, status])
+  @@index([createdAt])
+  @@index([updatedAt])
+  @@index([status, assignedToId])
+  @@index([type, status])
+}
+
+model Receipt {
+  id               String       @id @default(cuid())
+  receiptNumber    String       @unique
+  orderId          String       @unique
+  amountNok        Int
+  currency         String       @default("NOK")
+  paidAt           DateTime
+  note             String?
+  recipientName    String
+  recipientEmail   String
+  sentToLandlordAt DateTime?
+  sentToAdminAt    DateTime?
+  createdAt        DateTime     @default(now())
+  updatedAt        DateTime     @updatedAt
+  order            ServiceOrder @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@index([paidAt])
+  @@index([createdAt])
 }
 
 model Image {
@@ -93,12 +144,18 @@ model Comment {
 }
 
 model Notification {
-  id        String   @id @default(cuid())
-  message   String
-  userId    String
-  isRead    Boolean  @default(false)
-  createdAt DateTime @default(now())
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id          String   @id @default(cuid())
+  message     String
+  userId      String
+  actorUserId String?
+  targetUrl   String?
+  isRead      Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  actorUser   User?    @relation("NotificationActor", fields: [actorUserId], references: [id], onDelete: SetNull)
+
+  @@index([userId, isRead, createdAt])
+  @@index([createdAt])
 }
 
 model Message {
@@ -111,4 +168,22 @@ model Message {
   order       ServiceOrder @relation(fields: [orderId], references: [id], onDelete: Cascade)
   sender      User         @relation("MessageSender", fields: [senderId], references: [id])
   recipient   User         @relation("MessageRecipient", fields: [recipientId], references: [id])
+
+  @@index([orderId, createdAt])
+  @@index([recipientId, createdAt])
+}
+
+model Review {
+  id         String   @id @default(cuid())
+  reviewerId String
+  workerId   String
+  orderId    String?
+  rating     Int
+  comment    String
+  createdAt  DateTime @default(now())
+  reviewer   User     @relation("ReviewAuthor", fields: [reviewerId], references: [id], onDelete: Cascade)
+  worker     User     @relation("ReviewWorker", fields: [workerId], references: [id], onDelete: Cascade)
+
+  @@index([workerId, createdAt])
+  @@unique([reviewerId, workerId, orderId])
 }

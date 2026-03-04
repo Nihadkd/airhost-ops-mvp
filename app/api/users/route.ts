@@ -10,7 +10,27 @@ export async function GET() {
     await requireRole(["ADMIN"]);
     const users = await prisma.user.findMany({
       orderBy: { createdAt: "desc" },
-      select: { id: true, name: true, email: true, role: true, isActive: true, createdAt: true },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        phone: true,
+        role: true,
+        isActive: true,
+        canLandlord: true,
+        canService: true,
+        activeMode: true,
+        createdAt: true,
+        _count: {
+          select: {
+            landlordOrders: true,
+            assignedOrders: true,
+            reviewsWritten: true,
+            reviewsReceived: true,
+            pushTokens: true,
+          },
+        },
+      },
     });
     return NextResponse.json(users);
   } catch (error) {
@@ -26,7 +46,27 @@ export async function POST(req: Request) {
     const password = await bcrypt.hash(data.password, 10);
     const user = await prisma.user.create({
       data: { ...data, password },
-      select: { id: true, name: true, email: true, role: true, isActive: true, createdAt: true },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        phone: true,
+        role: true,
+        isActive: true,
+        canLandlord: true,
+        canService: true,
+        activeMode: true,
+        createdAt: true,
+        _count: {
+          select: {
+            landlordOrders: true,
+            assignedOrders: true,
+            reviewsWritten: true,
+            reviewsReceived: true,
+            pushTokens: true,
+          },
+        },
+      },
     });
     return NextResponse.json(user, { status: 201 });
   } catch (error) {

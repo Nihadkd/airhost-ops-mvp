@@ -1,39 +1,29 @@
 import { NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
-import { requireAuth } from "@/lib/rbac";
 import { apiError, handleApiError } from "@/lib/api";
+import { requireAuth } from "@/lib/rbac";
+import { claimOrderForWorker } from "@/lib/services/order-claim-service";
+import { orderIdParamSchema } from "@/lib/validators";
 
 export async function PUT(_: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
     const session = await requireAuth();
-    if (session.user.role !== "TJENESTE") {
+    const isAdmin = session.user.accountRole === "ADMIN" || session.user.role === "ADMIN";
+    if (!isAdmin && session.user.role !== "TJENESTE") {
       return apiError(403, "Only worker can claim jobs");
     }
 
-    const { id } = await params;
-    const order = await prisma.serviceOrder.findUnique({ where: { id } });
-    if (!order) return apiError(404, "Order not found");
-
-    if (order.assignedToId && order.assignedToId !== session.user.id) {
-      return apiError(409, "Order already assigned");
+    const parsedParams = orderIdParamSchema.safeParse(await params);
+    if (!parsedParams.success) {
+      return apiError(400, "Invalid order id");
     }
 
-    const updated = await prisma.serviceOrder.update({
-      where: { id },
-      data: {
-        assignedToId: session.user.id,
-        status: "IN_PROGRESS",
-      },
+    const { order } = await claimOrderForWorker({
+      orderId: parsedParams.data.id,
+      workerId: session.user.id,
+      workerName: session.user.name,
     });
 
-    await prisma.notification.create({
-      data: {
-        userId: order.landlordId,
-        message: "En tjenesteutfører har påtatt seg oppdraget ditt.",
-      },
-    });
-
-    return NextResponse.json(updated);
+    return NextResponse.json(order);
   } catch (error) {
     return handleApiError(error);
   }

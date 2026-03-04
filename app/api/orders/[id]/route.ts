@@ -2,12 +2,15 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAuth } from "@/lib/rbac";
 import { apiError, handleApiError } from "@/lib/api";
+import { canAssignedWorkerStartOrder, canAssignedWorkerWriteOrder } from "@/lib/order-worker-access";
+import { getStartAvailabilityForWorker, startOrderForWorker } from "@/lib/services/order-start-service";
 import { orderUpdateSchema } from "@/lib/validators";
+import { sendPushToUser } from "@/lib/push";
 
-async function canView(orderId: string, userId: string, role: string) {
+async function canView(orderId: string, userId: string, role: string, isAdminAccount: boolean) {
   const order = await prisma.serviceOrder.findUnique({ where: { id: orderId } });
   if (!order) return { ok: false, order: null };
-  if (role === "ADMIN") return { ok: true, order };
+  if (isAdminAccount || role === "ADMIN") return { ok: true, order };
   if (role === "UTLEIER" && order.landlordId === userId) return { ok: true, order };
   if (role === "TJENESTE" && order.assignedToId === userId) return { ok: true, order };
   if (role === "TJENESTE" && order.assignedToId === null && order.status === "PENDING") return { ok: true, order };
@@ -17,8 +20,9 @@ async function canView(orderId: string, userId: string, role: string) {
 export async function GET(_: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
     const session = await requireAuth();
+    const isAdminAccount = session.user.accountRole === "ADMIN";
     const { id } = await params;
-    const access = await canView(id, session.user.id, session.user.role);
+    const access = await canView(id, session.user.id, session.user.role, isAdminAccount);
     if (!access.ok) return apiError(403, "Forbidden");
 
     const order = await prisma.serviceOrder.findUnique({
@@ -33,18 +37,21 @@ export async function GET(_: Request, { params }: { params: Promise<{ id: string
           },
           orderBy: { createdAt: "desc" },
         },
-        messages: {
-          include: {
-            sender: { select: { id: true, name: true, role: true } },
-            recipient: { select: { id: true, name: true, role: true } },
-          },
-          orderBy: { createdAt: "asc" },
-        },
       },
     });
 
     if (!order) return apiError(404, "Order not found");
-    return NextResponse.json(order);
+    const startAvailability =
+      session.user.role === "TJENESTE" && order.assignedToId === session.user.id
+        ? await getStartAvailabilityForWorker(order.id, session.user.id)
+        : { canStart: false, blockedByOrderId: null, blockedByOrderNumber: null };
+
+    return NextResponse.json({
+      ...order,
+      canStart: startAvailability.canStart,
+      startBlockedByOrderId: startAvailability.blockedByOrderId,
+      startBlockedByOrderNumber: startAvailability.blockedByOrderNumber,
+    });
   } catch (error) {
     return handleApiError(error);
   }
@@ -53,8 +60,9 @@ export async function GET(_: Request, { params }: { params: Promise<{ id: string
 export async function PUT(req: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
     const session = await requireAuth();
+    const isAdminAccount = session.user.accountRole === "ADMIN";
     const { id } = await params;
-    const access = await canView(id, session.user.id, session.user.role);
+    const access = await canView(id, session.user.id, session.user.role, isAdminAccount);
     if (!access.ok || !access.order) return apiError(403, "Forbidden");
 
     const body = await req.json();
@@ -63,37 +71,73 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
 
     const data: Record<string, unknown> = {};
 
-    if (parsed.data.address && (session.user.role === "ADMIN" || session.user.role === "UTLEIER")) {
+    if (parsed.data.address && (isAdminAccount || session.user.role === "ADMIN" || session.user.role === "UTLEIER")) {
       data.address = parsed.data.address;
     }
-    if (parsed.data.date && (session.user.role === "ADMIN" || session.user.role === "UTLEIER")) {
+    if (parsed.data.type && (isAdminAccount || session.user.role === "ADMIN" || session.user.role === "UTLEIER")) {
+      data.type = parsed.data.type;
+    }
+    if (parsed.data.date && (isAdminAccount || session.user.role === "ADMIN" || session.user.role === "UTLEIER")) {
       data.date = new Date(parsed.data.date);
     }
-    if (parsed.data.note !== undefined && (session.user.role === "ADMIN" || session.user.role === "UTLEIER")) {
+    if (parsed.data.note !== undefined && (isAdminAccount || session.user.role === "ADMIN" || session.user.role === "UTLEIER")) {
       data.note = parsed.data.note;
+    }
+    if (parsed.data.guestCount !== undefined && (isAdminAccount || session.user.role === "ADMIN" || session.user.role === "UTLEIER")) {
+      data.guestCount = parsed.data.guestCount;
     }
 
     if (parsed.data.status) {
-      if (session.user.role === "ADMIN") {
+      if (isAdminAccount || session.user.role === "ADMIN") {
         data.status = parsed.data.status;
       }
       if (
         session.user.role === "TJENESTE" &&
-        access.order.assignedToId === session.user.id &&
-        ["IN_PROGRESS", "COMPLETED"].includes(parsed.data.status)
+        access.order.assignedToId === session.user.id
       ) {
-        data.status = parsed.data.status;
+        if (
+          parsed.data.status === "IN_PROGRESS" &&
+          canAssignedWorkerStartOrder(access.order, session.user.id, false)
+        ) {
+          const started = await startOrderForWorker({
+            orderId: id,
+            workerId: session.user.id,
+          });
+          return NextResponse.json(started);
+        }
+        if (parsed.data.status === "IN_PROGRESS") {
+          return apiError(409, "Du må fullføre tidligere oppdrag før du kan starte dette.", {
+            code: "WORKER_SEQUENCE_BLOCKED",
+          });
+        }
+        if (
+          parsed.data.status === "COMPLETED" &&
+          canAssignedWorkerWriteOrder(access.order, session.user.id, false)
+        ) {
+          data.status = parsed.data.status;
+          data.completionNote = parsed.data.completionNote ?? null;
+          data.completionChecklist = parsed.data.completionChecklist ?? null;
+        }
       }
     }
 
     const updated = await prisma.serviceOrder.update({ where: { id }, data });
 
     if (session.user.role === "TJENESTE" && parsed.data.status === "COMPLETED") {
+      const doneMessage = `Oppdrag #${access.order.orderNumber} er fullført. Vennligst gå gjennom oppdraget og legg igjen vurdering.`;
+
       await prisma.notification.create({
         data: {
           userId: access.order.landlordId,
-          message: "Oppdrag er markert som utført.",
+          actorUserId: session.user.id,
+          message: doneMessage,
+          targetUrl: `/orders/${id}`,
         },
+      });
+      await sendPushToUser(access.order.landlordId, {
+        title: "Oppdrag fullført",
+        body: doneMessage,
+        data: { orderId: id, type: "order_completed", path: `/orders/${id}` },
       });
     }
 
@@ -106,11 +150,15 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
 export async function DELETE(_: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
     const session = await requireAuth();
+    const isAdminAccount = session.user.accountRole === "ADMIN";
     const { id } = await params;
     const order = await prisma.serviceOrder.findUnique({ where: { id } });
     if (!order) return apiError(404, "Order not found");
 
-    const canDelete = session.user.role === "ADMIN" || (session.user.role === "UTLEIER" && order.landlordId === session.user.id && order.status === "PENDING");
+    const canDelete =
+      isAdminAccount ||
+      session.user.role === "ADMIN" ||
+      (session.user.role === "UTLEIER" && order.landlordId === session.user.id);
     if (!canDelete) return apiError(403, "Forbidden");
 
     await prisma.serviceOrder.delete({ where: { id } });

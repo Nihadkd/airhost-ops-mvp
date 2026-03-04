@@ -2,23 +2,30 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { signIn } from "next-auth/react";
-import { useState } from "react";
+import { signIn, useSession } from "next-auth/react";
+import { useEffect, useState } from "react";
 import { useLanguage } from "@/lib/language-context";
 
 export default function LoginPage() {
   const router = useRouter();
+  const { status } = useSession();
   const [error, setError] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const { lang, setLang, t } = useLanguage();
 
+  useEffect(() => {
+    if (status === "authenticated") {
+      router.replace("/dashboard");
+    }
+  }, [router, status]);
+
   const submit = async (formData: FormData) => {
     setError("");
     setLoading(true);
     try {
-      const email = String(formData.get("email"));
-      const password = String(formData.get("password"));
+      const email = String(formData.get("email") ?? "").trim().toLowerCase();
+      const password = String(formData.get("password") ?? "");
 
       const res = await signIn("credentials", { email, password, redirect: false });
       if (!res?.ok) {
@@ -36,16 +43,7 @@ export default function LoginPage() {
         return;
       }
 
-      const sessionRes = await fetch("/api/auth/session", { cache: "no-store" });
-      const session = sessionRes.ok ? ((await sessionRes.json()) as { user?: { id?: string } | null }) : null;
-      if (!session?.user?.id) {
-        setLoading(false);
-        setError(t("loginSessionError"));
-        return;
-      }
-
       router.push("/dashboard");
-      router.refresh();
     } catch {
       setLoading(false);
       setError(t("loginUnknownError"));
@@ -63,12 +61,35 @@ export default function LoginPage() {
       <h1 className="text-2xl font-bold">{t("login")}</h1>
       <p className="text-sm text-slate-600">{t("loginSubtitle")}</p>
       <form action={submit} className="mt-4 space-y-3">
-        <input className="input" type="email" name="email" placeholder={t("email")} required />
+        <input
+          className="input"
+          type="email"
+          name="email"
+          placeholder={t("email")}
+          autoCapitalize="none"
+          autoCorrect="off"
+          spellCheck={false}
+          required
+        />
         <div className="space-y-2">
-          <input className="input" type={showPassword ? "text" : "password"} name="password" placeholder={t("password")} required />
+          <input
+            className="input"
+            type={showPassword ? "text" : "password"}
+            name="password"
+            placeholder={t("password")}
+            autoCapitalize="none"
+            autoCorrect="off"
+            spellCheck={false}
+            required
+          />
           <button type="button" className="text-sm text-teal-700 underline" onClick={() => setShowPassword((prev) => !prev)}>
             {showPassword ? t("hidePassword") : t("showPassword")}
           </button>
+          <div>
+            <Link href="/forgot-password" className="text-sm text-teal-700 underline">
+              {t("forgotPassword")}
+            </Link>
+          </div>
         </div>
         {error && <p className="text-sm text-red-600">{error}</p>}
         <button className="btn btn-primary w-full" type="submit" disabled={loading}>
@@ -77,6 +98,11 @@ export default function LoginPage() {
       </form>
       <p className="mt-3 text-sm">
         {t("noAccount")} <Link href="/register" className="text-teal-700 underline">{t("register")}</Link>
+      </p>
+      <p className="mt-2 text-xs text-slate-500">
+        <Link href="/privacy" className="underline">Personvern</Link> ·{" "}
+        <Link href="/terms" className="underline">Vilkår</Link> ·{" "}
+        <Link href="/support" className="underline">Support</Link>
       </p>
     </main>
   );

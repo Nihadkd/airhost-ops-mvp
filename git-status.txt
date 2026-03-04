@@ -1,0 +1,106 @@
+ M .gitignore
+ M app/(auth)/login/page.tsx
+ M app/(auth)/register/page.tsx
+ M app/(dashboard)/admin/users/page.tsx
+ M app/(dashboard)/dashboard/page.tsx
+ M app/(dashboard)/layout.tsx
+ M app/(dashboard)/orders/[id]/page.tsx
+ M app/(dashboard)/orders/new/page.tsx
+ M app/(dashboard)/profile/page.tsx
+ M app/api/auth/register/route.ts
+ M app/api/comments/[id]/route.ts
+ M app/api/images/[id]/route.ts
+ M app/api/images/route.ts
+ M app/api/images/upload/route.ts
+ M app/api/notifications/route.ts
+ M app/api/orders/[id]/assign/route.ts
+ M app/api/orders/[id]/claim/route.ts
+ M app/api/orders/[id]/messages/route.ts
+ M app/api/orders/[id]/route.ts
+ M app/api/orders/route.ts
+ M app/api/users/[id]/route.ts
+ M app/api/users/me/mode/route.ts
+ M app/api/users/me/route.ts
+ M app/api/users/route.ts
+ M app/globals.css
+ M app/layout.tsx
+ M app/providers.tsx
+ M components/admin-users-client.tsx
+ M components/notification-popup.tsx
+ M components/order-create-form.tsx
+ M components/order-detail-client.tsx
+ M components/profile-client.tsx
+ M components/status-badge.tsx
+ M components/top-nav.tsx
+ M core/modules/health/health.module.ts
+ M lib/api.ts
+ M lib/auth.ts
+ M lib/language-context.tsx
+ M lib/prisma.ts
+ M lib/rbac.ts
+ M lib/user-role.ts
+ M lib/validators.ts
+ M package-lock.json
+ M package.json
+ D prisma/migrations/20260216144110_add_user_model/migration.sql
+ D prisma/migrations/20260217074634_init_airhost_mvp/migration.sql
+ D prisma/migrations/20260217081138_add_dual_mode_roles/migration.sql
+ M prisma/migrations/migration_lock.toml
+ M prisma/schema.prisma
+ M prisma/seed.cjs
+ M tests/api/media-and-comments.test.ts
+ M tests/api/messages.test.ts
+ M tests/api/notifications-and-stats.test.ts
+ M tests/api/orders.test.ts
+ M tests/api/register.test.ts
+ M tests/api/users.test.ts
+ M tsconfig.json
+?? RELEASE_CHECKLIST.md
+?? app/(auth)/forgot-password/
+?? app/(dashboard)/messages/
+?? app/(dashboard)/orders/completed/
+?? app/(dashboard)/orders/my/
+?? app/(dashboard)/prices/
+?? app/(dashboard)/settings/
+?? app/(dashboard)/users/
+?? app/api/auth/reset-password/
+?? app/api/dashboard/
+?? app/api/health/db/
+?? app/api/notifications/unread-count/
+?? app/api/orders/[id]/messages/[messageId]/
+?? app/api/orders/[id]/messages/stream/
+?? app/api/orders/[id]/receipt/
+?? app/api/reviews/
+?? app/api/users/[id]/contact/
+?? app/api/users/me/preferences/
+?? app/api/users/me/push-token/
+?? app/privacy/
+?? app/support/
+?? app/terms/
+?? artifacts/
+?? components/floating-message-bubble.tsx
+?? components/messages-page-client.tsx
+?? components/onboarding-modal.tsx
+?? components/prices-calculator.tsx
+?? components/prices-page-content.tsx
+?? components/settings-client.tsx
+?? components/user-public-profile-client.tsx
+?? docs/
+?? lib/client-error.ts
+?? lib/mailer.ts
+?? lib/play-notification-sound.ts
+?? lib/push.ts
+?? lib/receipt.ts
+?? lib/sms.ts
+?? mobile/
+?? prisma/migrations/20260218073000_init_postgres/
+?? scripts/verify-admin-delete-user.mjs
+?? scripts/verify-admin-delete-via-api.mjs
+?? scripts/verify-admin-delete-via-ui.mjs
+?? scripts/verify-admin-menu-access.mjs
+?? scripts/verify-guestcount-visual.mjs
+?? scripts/verify-order-map-width.mjs
+?? tests/api/dashboard.test.ts
+?? tests/api/push-token.test.ts
+?? tests/api/receipt.test.ts
+?? tests/api/user-delete.test.ts

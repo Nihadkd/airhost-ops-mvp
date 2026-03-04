@@ -2,16 +2,18 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAuth } from "@/lib/rbac";
 import { apiError, handleApiError } from "@/lib/api";
+import { canAssignedWorkerWriteOrder, isAssignedWorkerPendingStart } from "@/lib/order-worker-access";
 import { messageCreateSchema } from "@/lib/validators";
+import { sendPushToUser } from "@/lib/push";
 
-async function getOrderIfParticipant(orderId: string, userId: string) {
+async function getOrderIfParticipant(orderId: string, userId: string, isAdmin: boolean) {
   const order = await prisma.serviceOrder.findUnique({
     where: { id: orderId },
-    select: { id: true, landlordId: true, assignedToId: true },
+    select: { id: true, landlordId: true, assignedToId: true, status: true },
   });
   if (!order) return { ok: false as const, order: null };
 
-  const isParticipant = order.landlordId === userId || order.assignedToId === userId;
+  const isParticipant = isAdmin || order.landlordId === userId || order.assignedToId === userId;
   if (!isParticipant) return { ok: false as const, order };
 
   return { ok: true as const, order };
@@ -20,10 +22,10 @@ async function getOrderIfParticipant(orderId: string, userId: string) {
 export async function GET(_: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
     const session = await requireAuth();
-    if (session.user.role === "ADMIN") return apiError(403, "Only landlord/worker can access chat");
+    const isAdmin = session.user.accountRole === "ADMIN" || session.user.role === "ADMIN";
 
     const { id } = await params;
-    const access = await getOrderIfParticipant(id, session.user.id);
+    const access = await getOrderIfParticipant(id, session.user.id, isAdmin);
     if (!access.ok) return apiError(403, "Forbidden");
 
     const messages = await prisma.message.findMany({
@@ -46,18 +48,32 @@ export async function GET(_: Request, { params }: { params: Promise<{ id: string
 export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
     const session = await requireAuth();
-    if (session.user.role === "ADMIN") return apiError(403, "Only landlord/worker can send chat messages");
+    const isAdmin = session.user.accountRole === "ADMIN" || session.user.role === "ADMIN";
 
     const { id } = await params;
-    const access = await getOrderIfParticipant(id, session.user.id);
+    const access = await getOrderIfParticipant(id, session.user.id, isAdmin);
     if (!access.ok || !access.order) return apiError(403, "Forbidden");
 
     const body = await req.json();
     const parsed = messageCreateSchema.safeParse(body);
     if (!parsed.success) return apiError(400, "Invalid payload");
 
-    const recipientId =
-      access.order.landlordId === session.user.id ? access.order.assignedToId : access.order.landlordId;
+    const isLandlordParticipant = access.order.landlordId === session.user.id;
+    const isWorkerParticipant = access.order.assignedToId === session.user.id;
+    if (
+      isAssignedWorkerPendingStart(access.order, session.user.id, isAdmin) ||
+      (isWorkerParticipant && !canAssignedWorkerWriteOrder(access.order, session.user.id, isAdmin))
+    ) {
+      return apiError(409, "You must press START before you can write or make changes in this job.", {
+        code: "ORDER_NOT_STARTED",
+      });
+    }
+
+    const recipientId = isLandlordParticipant
+      ? access.order.assignedToId
+      : isWorkerParticipant
+        ? access.order.landlordId
+        : null;
     if (!recipientId) return apiError(409, "No recipient available yet for this order");
 
     const message = await prisma.message.create({
@@ -77,7 +93,13 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       data: {
         userId: recipientId,
         message: "Du har fått en ny melding i oppdragschatten.",
+        targetUrl: `/orders/${id}`,
       },
+    });
+    await sendPushToUser(recipientId, {
+      title: "Ny melding",
+      body: "Du har fått en ny melding i oppdragschatten.",
+      data: { orderId: id, type: "message", path: `/orders/${id}` },
     });
 
     return NextResponse.json(message, { status: 201 });
@@ -85,3 +107,5 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     return handleApiError(error);
   }
 }
+
+

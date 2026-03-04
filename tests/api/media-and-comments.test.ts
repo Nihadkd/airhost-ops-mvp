@@ -21,7 +21,7 @@ describe("/api/images and /api/comments", () => {
 
   it("POST /api/images", async () => {
     vi.mocked(requireAuth).mockResolvedValue({ user: { id: "t1", role: "TJENESTE" } } as never);
-    vi.mocked(prisma.serviceOrder.findUnique).mockResolvedValue({ id: "o1", assignedToId: "t1" } as never);
+    vi.mocked(prisma.serviceOrder.findUnique).mockResolvedValue({ id: "o1", assignedToId: "t1", status: "IN_PROGRESS" } as never);
     vi.mocked(prisma.image.create).mockResolvedValue({ id: "i1" } as never);
 
     const req = new Request("http://localhost", {
@@ -36,16 +36,18 @@ describe("/api/images and /api/comments", () => {
 
   it("POST /api/images/upload", async () => {
     vi.mocked(requireAuth).mockResolvedValue({ user: { id: "t1", role: "TJENESTE" } } as never);
-    vi.mocked(prisma.serviceOrder.findUnique).mockResolvedValue({ id: "o1", assignedToId: "t1" } as never);
+    vi.mocked(prisma.serviceOrder.findUnique).mockResolvedValue({ id: "o1", assignedToId: "t1", status: "IN_PROGRESS" } as never);
     vi.mocked(prisma.image.create).mockResolvedValue({ id: "i1" } as never);
 
     const fd = new FormData();
     fd.append("orderId", "o1");
-    fd.append("file", new File(["x"], "x.jpg", { type: "image/jpeg" }));
+    fd.append("files", new File(["x"], "x.jpg", { type: "image/jpeg" }));
+    fd.append("files", new File(["y"], "y.jpg", { type: "image/jpeg" }));
 
     const req = new Request("http://localhost", { method: "POST", body: fd });
     const res = await uploadImage(req);
     expect(res.status).toBe(201);
+    expect(vi.mocked(prisma.image.create)).toHaveBeenCalledTimes(2);
   });
 
   it("POST /api/comments", async () => {

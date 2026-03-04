@@ -26,7 +26,7 @@ describe("/api/users", () => {
     vi.mocked(prisma.user.create).mockResolvedValue({ id: "u1" } as never);
     const req = new Request("http://localhost/api/users", {
       method: "POST",
-      body: JSON.stringify({ name: "Xx", email: "x@x.com", password: "password123", role: "UTLEIER" }),
+      body: JSON.stringify({ name: "Xx", email: "x@x.com", phone: "+4790000009", password: "password123", role: "UTLEIER" }),
       headers: { "Content-Type": "application/json" },
     });
     const res = await POST(req);

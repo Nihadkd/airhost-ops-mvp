@@ -1,4 +1,4 @@
-import { moduleRegistry } from "../../module-registry"
+import { moduleRegistry } from "@/core/module-registry"
 
 export class HealthModule {
   getStatus() {

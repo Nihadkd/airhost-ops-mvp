@@ -6,11 +6,12 @@ import { apiError, handleApiError } from "@/lib/api";
 export async function PUT(req: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
     const session = await requireAuth();
+    const isAdmin = session.user.accountRole === "ADMIN" || session.user.role === "ADMIN";
     const { id } = await params;
     const comment = await prisma.comment.findUnique({ where: { id } });
     if (!comment) return apiError(404, "Comment not found");
 
-    const canEdit = session.user.role === "ADMIN" || comment.userId === session.user.id;
+    const canEdit = isAdmin || comment.userId === session.user.id;
     if (!canEdit) return apiError(403, "Forbidden");
 
     const body = await req.json();
@@ -26,11 +27,12 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
 export async function DELETE(_: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
     const session = await requireAuth();
+    const isAdmin = session.user.accountRole === "ADMIN" || session.user.role === "ADMIN";
     const { id } = await params;
     const comment = await prisma.comment.findUnique({ where: { id } });
     if (!comment) return apiError(404, "Comment not found");
 
-    const canDelete = session.user.role === "ADMIN" || comment.userId === session.user.id;
+    const canDelete = isAdmin || comment.userId === session.user.id;
     if (!canDelete) return apiError(403, "Forbidden");
 
     await prisma.comment.delete({ where: { id } });

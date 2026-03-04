@@ -2,11 +2,13 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAuth } from "@/lib/rbac";
 import { apiError, handleApiError } from "@/lib/api";
+import { canAssignedWorkerWriteOrder } from "@/lib/order-worker-access";
 import { imageCreateSchema } from "@/lib/validators";
 
 export async function GET(req: Request) {
   try {
     const session = await requireAuth();
+    const isAdmin = session.user.accountRole === "ADMIN" || session.user.role === "ADMIN";
     const { searchParams } = new URL(req.url);
     const orderId = searchParams.get("orderId");
     if (!orderId) return apiError(400, "Missing orderId");
@@ -15,7 +17,7 @@ export async function GET(req: Request) {
     if (!order) return apiError(404, "Order not found");
 
     const allowed =
-      session.user.role === "ADMIN" ||
+      isAdmin ||
       (session.user.role === "UTLEIER" && order.landlordId === session.user.id) ||
       (session.user.role === "TJENESTE" && order.assignedToId === session.user.id);
 
@@ -36,7 +38,8 @@ export async function GET(req: Request) {
 export async function POST(req: Request) {
   try {
     const session = await requireAuth();
-    if (!["ADMIN", "TJENESTE"].includes(session.user.role)) {
+    const isAdmin = session.user.accountRole === "ADMIN" || session.user.role === "ADMIN";
+    if (!isAdmin && session.user.role !== "TJENESTE") {
       return apiError(403, "Only admin/worker can upload images");
     }
 
@@ -45,8 +48,13 @@ export async function POST(req: Request) {
 
     const order = await prisma.serviceOrder.findUnique({ where: { id: data.orderId } });
     if (!order) return apiError(404, "Order not found");
-    if (session.user.role === "TJENESTE" && order.assignedToId !== session.user.id) {
+    if (!isAdmin && session.user.role === "TJENESTE" && order.assignedToId !== session.user.id) {
       return apiError(403, "Not assigned to order");
+    }
+    if (!isAdmin && session.user.role === "TJENESTE" && !canAssignedWorkerWriteOrder(order, session.user.id, false)) {
+      return apiError(409, "You must press START before you can write or make changes in this job.", {
+        code: "ORDER_NOT_STARTED",
+      });
     }
 
     const image = await prisma.image.create({

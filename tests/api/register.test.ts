@@ -4,6 +4,7 @@ vi.mock("@/lib/prisma", () => ({
   prisma: {
     user: {
       findUnique: vi.fn(),
+      findFirst: vi.fn(),
       create: vi.fn(),
     },
   },
@@ -16,12 +17,12 @@ describe("POST /api/auth/register", () => {
   beforeEach(() => vi.clearAllMocks());
 
   it("creates worker user", async () => {
-    vi.mocked(prisma.user.findUnique).mockResolvedValue(null as never);
-    vi.mocked(prisma.user.create).mockResolvedValue({ id: "1", name: "Ab", email: "a@a.com", role: "TJENESTE", createdAt: new Date() } as never);
+    vi.mocked(prisma.user.findFirst).mockResolvedValue(null as never);
+    vi.mocked(prisma.user.create).mockResolvedValue({ id: "1", name: "Ab", email: "a@a.com", phone: "+4790000000", role: "TJENESTE", createdAt: new Date() } as never);
 
     const req = new Request("http://localhost/api/auth/register", {
       method: "POST",
-      body: JSON.stringify({ name: "Ab", email: "a@a.com", password: "password123", role: "TJENESTE" }),
+      body: JSON.stringify({ name: "Ab", email: "a@a.com", phone: "+4790000000", password: "password123", role: "TJENESTE" }),
       headers: { "Content-Type": "application/json" },
     });
 

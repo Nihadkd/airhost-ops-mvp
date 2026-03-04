@@ -48,5 +48,8 @@ dev-server.log
 tunnel.log
 ssh-tunnel.log
 share.log
-
-.vercel
+*.err
+*.log
+System.Drawing.Drawing2D.GraphicsPath
+public/downloads/*.apk
+mobile/*.apk

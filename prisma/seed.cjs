@@ -4,6 +4,8 @@ const bcrypt = require("bcryptjs");
 const prisma = new PrismaClient();
 
 async function main() {
+  await prisma.review.deleteMany();
+  await prisma.message.deleteMany();
   await prisma.comment.deleteMany();
   await prisma.image.deleteMany();
   await prisma.serviceOrder.deleteMany();
@@ -19,6 +21,7 @@ async function main() {
     data: {
       name: "Admin Leder",
       email: "admin@airhost.no",
+      phone: "+4790000001",
       password: adminPassword,
       role: Role.ADMIN,
       canLandlord: true,
@@ -31,6 +34,7 @@ async function main() {
     data: {
       name: "Nora Utleier",
       email: "utleier@airhost.no",
+      phone: "+4790000002",
       password: landlordPassword,
       role: Role.UTLEIER,
       canLandlord: true,
@@ -43,6 +47,7 @@ async function main() {
     data: {
       name: "Ali Tjeneste",
       email: "tjeneste@airhost.no",
+      phone: "+4790000003",
       password: workerPassword,
       role: Role.TJENESTE,
       canLandlord: false,
@@ -55,6 +60,7 @@ async function main() {
     data: {
       name: "Sara Begge",
       email: "begge@airhost.no",
+      phone: "+4790000004",
       password: dualPassword,
       role: Role.UTLEIER,
       canLandlord: true,
@@ -69,6 +75,7 @@ async function main() {
       address: "Karl Johans gate 12, Oslo",
       date: new Date(Date.now() + 86400000),
       note: "Bytt sengetoy og sjekk badet",
+      guestCount: 2,
       landlordId: landlord.id,
       assignedToId: worker.id,
     },

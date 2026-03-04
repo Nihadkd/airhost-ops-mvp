@@ -6,7 +6,7 @@ import { LanguageProvider } from "@/lib/language-context";
 
 export function Providers({ children }: { children: React.ReactNode }) {
   return (
-    <SessionProvider>
+    <SessionProvider refetchOnWindowFocus={false} refetchWhenOffline={false} refetchInterval={0}>
       <LanguageProvider>
         {children}
         <Toaster position="top-right" />

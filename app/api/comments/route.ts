@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAuth } from "@/lib/rbac";
 import { apiError, handleApiError } from "@/lib/api";
+import { canAssignedWorkerWriteOrder } from "@/lib/order-worker-access";
 import { commentCreateSchema } from "@/lib/validators";
 
 async function canAccessImage(userId: string, role: string, imageId: string) {
@@ -43,6 +44,21 @@ export async function POST(req: Request) {
 
     const allowed = await canAccessImage(session.user.id, session.user.role, data.imageId);
     if (!allowed) return apiError(403, "Forbidden");
+
+    const image = await prisma.image.findUnique({
+      where: { id: data.imageId },
+      include: { order: true },
+    });
+    if (!image) return apiError(404, "Image not found");
+    if (
+      session.user.role === "TJENESTE" &&
+      image.order.assignedToId === session.user.id &&
+      !canAssignedWorkerWriteOrder(image.order, session.user.id, false)
+    ) {
+      return apiError(409, "You must press START before you can write or make changes in this job.", {
+        code: "ORDER_NOT_STARTED",
+      });
+    }
 
     const comment = await prisma.comment.create({
       data: {

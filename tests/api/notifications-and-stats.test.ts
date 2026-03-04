@@ -21,7 +21,7 @@ describe("notifications and stats", () => {
   it("GET /api/notifications", async () => {
     vi.mocked(requireAuth).mockResolvedValue({ user: { id: "u1", role: "UTLEIER" } } as never);
     vi.mocked(prisma.notification.findMany).mockResolvedValue([] as never);
-    const res = await listNotifications();
+    const res = await listNotifications(new Request("http://localhost/api/notifications"));
     expect(res.status).toBe(200);
   });
 

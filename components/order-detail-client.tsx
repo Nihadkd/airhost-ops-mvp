@@ -1,10 +1,15 @@
-"use client";
+﻿"use client";
 
 import Image from "next/image";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import type { FormEvent } from "react";
 import toast from "react-hot-toast";
 import { StatusBadge } from "@/components/status-badge";
 import { useLanguage } from "@/lib/language-context";
+import { playNotificationSound } from "@/lib/play-notification-sound";
+import { toUserErrorMessage } from "@/lib/client-error";
 
 type User = { id: string; name: string; role: "ADMIN" | "UTLEIER" | "TJENESTE" };
 type Comment = { id: string; text: string; user: User };
@@ -27,17 +32,46 @@ type ImageItem = {
 };
 type Order = {
   id: string;
+  orderNumber?: number;
+  canStart?: boolean;
+  startBlockedByOrderId?: string | null;
+  startBlockedByOrderNumber?: number | null;
   address: string;
+  date: string | Date;
   note: string | null;
+  guestCount?: number | null;
+  completionNote?: string | null;
+  completionChecklist?: Record<string, boolean> | null | unknown;
   type: string;
   status: "PENDING" | "IN_PROGRESS" | "COMPLETED";
   landlord: { id: string; name: string; email?: string | null };
-  assignedTo: { id: string; name: string; email?: string | null } | null;
+  assignedTo: { id: string; name: string; email?: string | null; averageRating?: number | null; reviewCount?: number } | null;
   images: ImageItem[];
-  messages: Message[];
+  messages?: Message[];
 };
 
-type Worker = { id: string; name: string; role: "ADMIN" | "UTLEIER" | "TJENESTE" };
+type Worker = {
+  id: string;
+  name: string;
+  role: "ADMIN" | "UTLEIER" | "TJENESTE";
+  averageRating?: number | null;
+  reviewCount?: number;
+};
+type ReceiptSummary = {
+  id: string;
+  receiptNumber: string;
+  amountNok: number;
+  paidAt: string | Date;
+  downloadUrl: string;
+};
+type PaymentSummary = {
+  status: "not_started" | "pending" | "paid";
+  provider: "stub";
+  amountNok: number;
+  paymentIntent: string | null;
+  receiptId: string | null;
+  paidAt: string | Date | null;
+};
 
 export function OrderDetailClient({
   initialOrder,
@@ -50,63 +84,341 @@ export function OrderDetailClient({
   workers: Worker[];
   currentUserId: string;
 }) {
+  const router = useRouter();
   const [order, setOrder] = useState(initialOrder);
   const [messages, setMessages] = useState<Message[]>(initialOrder.messages ?? []);
-  const [chatOpen, setChatOpen] = useState(false);
-  const { t } = useLanguage();
+  const [statusSaving, setStatusSaving] = useState(false);
+  const [claiming, setClaiming] = useState(false);
+  const [assignSaving, setAssignSaving] = useState(false);
+  const [completing, setCompleting] = useState(false);
+  const [reviewing, setReviewing] = useState(false);
+  const [selectedReviewRating, setSelectedReviewRating] = useState(5);
+  const [editing, setEditing] = useState(false);
+  const [savingEdit, setSavingEdit] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [sendingReceipt, setSendingReceipt] = useState(false);
+  const [receipt, setReceipt] = useState<ReceiptSummary | null>(null);
+  const [payment, setPayment] = useState<PaymentSummary | null>(null);
+  const [paymentBusy, setPaymentBusy] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const [visibleImageCount, setVisibleImageCount] = useState(12);
+  const [loadedImageIds, setLoadedImageIds] = useState<Record<string, true>>({});
+  const [chatHighlighted, setChatHighlighted] = useState(false);
+  const [newMessageNotice, setNewMessageNotice] = useState(false);
+  const [editValues, setEditValues] = useState({
+    type: initialOrder.type,
+    address: initialOrder.address,
+    date: new Date(initialOrder.date).toISOString().slice(0, 16),
+    guestCount: initialOrder.guestCount ? String(initialOrder.guestCount) : "",
+    note: initialOrder.note ?? "",
+  });
+  const { t, lang } = useLanguage();
+  const locale = lang === "no" ? "nb-NO" : "en-GB";
+  const refreshMessagesBusyRef = useRef(false);
+  const chatScrollRef = useRef<HTMLDivElement | null>(null);
+  const chatHighlightTimerRef = useRef<number | null>(null);
+  const newMessageNoticeTimerRef = useRef<number | null>(null);
+  const latestIncomingMessageIdRef = useRef<string>(
+    [...(initialOrder.messages ?? [])].reverse().find((msg) => msg.senderId !== currentUserId)?.id ?? "",
+  );
+
+  const renderWorkerRating = useCallback((averageRating?: number | null, reviewCount?: number) => {
+    if (!averageRating || !reviewCount) return null;
+    return (
+      <span className="ml-2 inline-flex items-center gap-1 rounded-full bg-amber-50 px-2 py-0.5 text-xs font-semibold text-amber-800">
+        <span aria-hidden="true">★</span>
+        <span>{averageRating.toFixed(1)}</span>
+        <span className="text-amber-700/80">({reviewCount})</span>
+      </span>
+    );
+  }, []);
 
   const mapUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(order.address)}`;
+  const showApiError = useCallback(async (res: Response, fallbackKey = "genericError") => {
+    toast.error(await toUserErrorMessage(res, t, fallbackKey));
+  }, [t]);
   const landlordMail =
     order.landlord.email ? `mailto:${order.landlord.email}?subject=${encodeURIComponent(`Spørsmål om oppdrag ${order.id}`)}` : null;
   const workerMail =
     order.assignedTo?.email ? `mailto:${order.assignedTo.email}?subject=${encodeURIComponent(`Spørsmål om oppdrag ${order.id}`)}` : null;
 
-  const isPrivateChatParticipant = role === "UTLEIER" || role === "TJENESTE";
+  const isLandlordParticipant = order.landlord.id === currentUserId;
+  const isWorkerParticipant = order.assignedTo?.id === currentUserId;
+  const isParticipant = isLandlordParticipant || isWorkerParticipant;
+  const isPrivateChatParticipant = isParticipant || role === "ADMIN";
+  const canUseJobChat = !!order.assignedTo?.id && isPrivateChatParticipant;
+  const isReadOnlyChat = !isParticipant;
+  const workerPendingStart = role !== "ADMIN" && isWorkerParticipant && order.status === "PENDING";
+  const canWorkerWriteToJob = role === "ADMIN" || !isWorkerParticipant || order.status === "IN_PROGRESS";
+  const canWorkerSendMessages = !isReadOnlyChat && canWorkerWriteToJob;
+  const canWorkerUpload = (role === "TJENESTE" || role === "ADMIN") && canWorkerWriteToJob;
+  const canWorkerComplete = (role === "TJENESTE" || role === "ADMIN") && order.status === "IN_PROGRESS";
+  const canCommentOnImages = role === "ADMIN" || !isWorkerParticipant || order.status === "IN_PROGRESS";
+  const canStartOrder = (role === "TJENESTE" || role === "ADMIN") && !!order.assignedTo && order.status === "PENDING";
+  const startAvailableNow = role === "ADMIN" ? canStartOrder : canStartOrder && order.canStart === true;
 
   const landlordImageCount = useMemo(() => {
     return order.images.filter((img) => img.uploadedBy?.role === "TJENESTE").length;
   }, [order.images]);
+  const visibleImages = useMemo(
+    () => order.images.slice(0, Math.max(0, visibleImageCount)),
+    [order.images, visibleImageCount],
+  );
+  const hasMoreImages = order.images.length > visibleImageCount;
+  const completionChecklist = (order.completionChecklist ?? {}) as Record<string, boolean>;
+  const checklistKeys = [
+    "bedReady",
+    "bathroomClean",
+    "kitchenClean",
+    "floorsVacuumed",
+    "trashHandled",
+    "keysHandled",
+    "towelsPrepared",
+    "suppliesRefilled",
+    "allRoomsPhotographed",
+  ];
+  const formatChecklistLabel = useCallback((key: string) => {
+    const guests = order.guestCount ?? 0;
+    if (guests > 0 && key === "bedReady") {
+      return lang === "no"
+        ? `Er seng klargjort for ${guests} ${guests === 1 ? "person" : "personer"}`
+        : `Are beds prepared for ${guests} ${guests === 1 ? "guest" : "guests"}`;
+    }
+    if (guests > 0 && key === "towelsPrepared") {
+      return lang === "no"
+        ? `Er det lagt frem håndklær for ${guests} ${guests === 1 ? "person" : "personer"}`
+        : `Are towels prepared for ${guests} ${guests === 1 ? "guest" : "guests"}`;
+    }
+    return t(key);
+  }, [lang, order.guestCount, t]);
+  const orderTypeLabel =
+    order.type === "CLEANING" ? t("serviceCleaningName") : order.type === "KEY_HANDLING" ? t("serviceKeyHandlingName") : order.type;
+
+  useEffect(() => {
+    const valid = new Set(order.images.map((img) => img.id));
+    setLoadedImageIds((prev) => {
+      const next: Record<string, true> = {};
+      for (const key of Object.keys(prev)) {
+        if (valid.has(key)) next[key] = true;
+      }
+      return next;
+    });
+  }, [order.images]);
+
+  useEffect(() => {
+    setVisibleImageCount((prev) => {
+      if (prev <= 0) return 12;
+      return Math.min(Math.max(prev, 12), Math.max(12, order.images.length));
+    });
+  }, [order.images.length]);
 
   const refresh = useCallback(async () => {
     const res = await fetch(`/api/orders/${order.id}`, { cache: "no-store" });
     if (!res.ok) return;
     const nextOrder = (await res.json()) as Order;
     setOrder(nextOrder);
-    if (isPrivateChatParticipant) {
-      setMessages(nextOrder.messages ?? []);
-    }
-  }, [isPrivateChatParticipant, order.id]);
+  }, [order.id]);
 
-  const refreshMessages = useCallback(async () => {
-    if (!isPrivateChatParticipant) return;
-    const res = await fetch(`/api/orders/${order.id}/messages`, { cache: "no-store" });
+  const refreshReceipt = useCallback(async () => {
+    const res = await fetch(`/api/orders/${order.id}/receipt`, { cache: "no-store" });
     if (!res.ok) return;
-    setMessages((await res.json()) as Message[]);
-  }, [isPrivateChatParticipant, order.id]);
+    const data = (await res.json()) as ReceiptSummary;
+    setReceipt(data);
+  }, [order.id]);
+
+  const refreshPayment = useCallback(async () => {
+    const res = await fetch(`/api/orders/${order.id}/payment`, { cache: "no-store" });
+    if (!res.ok) return;
+    const data = (await res.json()) as PaymentSummary;
+    setPayment(data);
+  }, [order.id]);
 
   useEffect(() => {
-    if (!isPrivateChatParticipant) return;
+    if (role !== "UTLEIER" && role !== "ADMIN") return;
+    void refreshReceipt();
+    void refreshPayment();
+  }, [refreshPayment, refreshReceipt, role]);
+
+  const scrollChatToNewest = useCallback((behavior: ScrollBehavior = "auto") => {
+    const container = chatScrollRef.current;
+    if (!container) return;
+    container.scrollTo({ top: container.scrollHeight, behavior });
+  }, []);
+
+  const refreshMessages = useCallback(async (opts?: { playAlert?: boolean }) => {
+    if (!canUseJobChat) return;
+    if (refreshMessagesBusyRef.current) return;
+    refreshMessagesBusyRef.current = true;
+    try {
+      const res = await fetch(`/api/orders/${order.id}/messages`, { cache: "no-store" });
+      if (res.ok) {
+        const nextMessages = (await res.json()) as Message[];
+        setMessages(nextMessages);
+        window.requestAnimationFrame(() => {
+          scrollChatToNewest(opts?.playAlert ? "smooth" : "auto");
+        });
+
+        const latestIncoming = [...nextMessages].reverse().find((msg) => msg.senderId !== currentUserId);
+        if (latestIncoming && latestIncoming.id !== latestIncomingMessageIdRef.current) {
+          latestIncomingMessageIdRef.current = latestIncoming.id;
+
+          if (opts?.playAlert !== false && typeof document !== "undefined" && document.visibilityState === "visible") {
+            playNotificationSound();
+            setChatHighlighted(true);
+            setNewMessageNotice(true);
+            if (chatHighlightTimerRef.current) window.clearTimeout(chatHighlightTimerRef.current);
+            chatHighlightTimerRef.current = window.setTimeout(() => setChatHighlighted(false), 4500);
+            if (newMessageNoticeTimerRef.current) window.clearTimeout(newMessageNoticeTimerRef.current);
+            newMessageNoticeTimerRef.current = window.setTimeout(() => setNewMessageNotice(false), 10000);
+          }
+        }
+      }
+    } finally {
+      refreshMessagesBusyRef.current = false;
+    }
+  }, [canUseJobChat, currentUserId, order.id, scrollChatToNewest]);
+
+  useEffect(() => {
+    if (!canUseJobChat) return;
+    const timer = window.setTimeout(() => {
+      void refreshMessages({ playAlert: false });
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [canUseJobChat, refreshMessages]);
+
+  useEffect(() => {
+    if (!canUseJobChat) return;
+    const timer = window.setTimeout(() => {
+      scrollChatToNewest("auto");
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [canUseJobChat, scrollChatToNewest]);
+
+  useEffect(() => {
+    if (!canUseJobChat) return;
+    if (typeof window === "undefined" || "EventSource" in window) return;
     const timer = setInterval(() => {
       void refreshMessages();
-    }, 8000);
+    }, 15000);
     return () => clearInterval(timer);
-  }, [isPrivateChatParticipant, refreshMessages]);
+  }, [canUseJobChat, refreshMessages]);
+
+  useEffect(() => {
+    if (!canUseJobChat) return;
+    if (typeof window === "undefined") return;
+
+    const stream = new EventSource(`/api/orders/${order.id}/messages/stream`);
+    stream.onmessage = (event) => {
+      const raw = event.data;
+      if (!raw) return;
+      try {
+        const payload = JSON.parse(raw) as { type?: string };
+        if (payload.type === "message" || payload.type === "reconnect") {
+          void refreshMessages({ playAlert: payload.type === "message" });
+        }
+      } catch {
+        // Ignore malformed event payloads.
+      }
+    };
+    stream.onerror = () => {
+      stream.close();
+    };
+
+    return () => {
+      stream.close();
+    };
+  }, [canUseJobChat, order.id, refreshMessages]);
+
+  useEffect(() => {
+    return () => {
+      if (chatHighlightTimerRef.current) window.clearTimeout(chatHighlightTimerRef.current);
+      if (newMessageNoticeTimerRef.current) window.clearTimeout(newMessageNoticeTimerRef.current);
+    };
+  }, []);
 
   const updateStatus = async (status: string) => {
+    const previous = order.status;
+    setStatusSaving(true);
+    setOrder((prev) => ({ ...prev, status: status as Order["status"] }));
+
     const res = await fetch(`/api/orders/${order.id}`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ status }),
     });
     if (!res.ok) {
-      toast.error("Kunne ikke oppdatere status");
+      setOrder((prev) => ({ ...prev, status: previous }));
+      await showApiError(res);
+      setStatusSaving(false);
       return;
     }
-    toast.success("Status oppdatert");
+    toast.success(t("statusUpdated"));
+    setStatusSaving(false);
+    void refresh();
+  };
+
+  const claimJob = async () => {
+    if ((role !== "TJENESTE" && role !== "ADMIN") || order.assignedTo) return;
+    setClaiming(true);
+    const res = await fetch(`/api/orders/${order.id}/claim`, { method: "PUT" });
+    setClaiming(false);
+    if (!res.ok) {
+      toast.error(t("cannotTakeJob"));
+      return;
+    }
+    toast.success(t("takenJob"));
     await refresh();
   };
 
+  const completeWithChecklist = async (formData: FormData) => {
+    setCompleting(true);
+    const checklist = {
+      bedReady: formData.get("bedReady") === "on",
+      bathroomClean: formData.get("bathroomClean") === "on",
+      kitchenClean: formData.get("kitchenClean") === "on",
+      floorsVacuumed: formData.get("floorsVacuumed") === "on",
+      trashHandled: formData.get("trashHandled") === "on",
+      keysHandled: formData.get("keysHandled") === "on",
+      towelsPrepared: formData.get("towelsPrepared") === "on",
+      suppliesRefilled: formData.get("suppliesRefilled") === "on",
+      allRoomsPhotographed: formData.get("allRoomsPhotographed") === "on",
+    };
+    const completionNote = String(formData.get("completionNote") ?? "");
+
+    const res = await fetch(`/api/orders/${order.id}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ status: "COMPLETED", completionNote, completionChecklist: checklist }),
+    });
+    setCompleting(false);
+    if (!res.ok) {
+      toast.error(t("completeOrderFailed"));
+      return;
+    }
+    toast.success(t("statusOk"));
+    await refresh();
+  };
+
+  const submitReview = async (formData: FormData) => {
+    if (!order.assignedTo?.id) return;
+    setReviewing(true);
+    const rating = Number(formData.get("rating"));
+    const comment = String(formData.get("comment") ?? "");
+    const res = await fetch("/api/reviews", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ workerId: order.assignedTo.id, orderId: order.id, rating, comment }),
+    });
+    setReviewing(false);
+    if (!res.ok) {
+      toast.error(t("reviewFailed"));
+      return;
+    }
+    toast.success(t("reviewSubmitted"));
+  };
+
   const assign = async (formData: FormData) => {
+    setAssignSaving(true);
     const assignedToId = String(formData.get("assignedToId"));
     const res = await fetch(`/api/orders/${order.id}/assign`, {
       method: "PUT",
@@ -114,24 +426,91 @@ export function OrderDetailClient({
       body: JSON.stringify({ assignedToId }),
     });
     if (!res.ok) {
-      toast.error("Kunne ikke tildele");
+      await showApiError(res);
+      setAssignSaving(false);
       return;
     }
-    toast.success("Oppdrag tildelt");
-    await refresh();
+    const nextWorker = workers.find((worker) => worker.id === assignedToId) ?? null;
+    setOrder((prev) => ({
+      ...prev,
+      assignedTo: nextWorker ? { id: nextWorker.id, name: nextWorker.name, email: null } : prev.assignedTo,
+    }));
+    toast.success(t("orderAssignedSuccess"));
+    setAssignSaving(false);
+    void refresh();
   };
 
-  const upload = async (formData: FormData) => {
-    formData.append("orderId", order.id);
-    const res = await fetch("/api/images/upload", { method: "POST", body: formData });
-    if (!res.ok) {
-      const body = (await res.json().catch(() => null)) as { error?: string } | null;
-      toast.error(body?.error ?? "Opplasting feilet");
-      return;
+  const compressImageFile = useCallback(async (file: File): Promise<File> => {
+    if (!file.type.startsWith("image/")) return file;
+    if (file.size <= 450 * 1024) return file;
+
+    const createCompressedFromCanvas = async (canvas: HTMLCanvasElement) => {
+      const blob = await new Promise<Blob | null>((resolve) => {
+        canvas.toBlob(resolve, "image/jpeg", 0.78);
+      });
+      if (!blob) return file;
+      if (blob.size >= file.size * 0.95) return file;
+      const safeBase = file.name.replace(/\.[^.]+$/, "") || "upload";
+      return new File([blob], `${safeBase}.jpg`, { type: "image/jpeg", lastModified: Date.now() });
+    };
+
+    try {
+      if (typeof createImageBitmap === "function") {
+        const bitmap = await createImageBitmap(file);
+        const maxSide = 1600;
+        const ratio = Math.min(1, maxSide / Math.max(bitmap.width, bitmap.height));
+        const width = Math.max(1, Math.round(bitmap.width * ratio));
+        const height = Math.max(1, Math.round(bitmap.height * ratio));
+
+        const canvas = document.createElement("canvas");
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext("2d");
+        if (!ctx) return file;
+        ctx.drawImage(bitmap, 0, 0, width, height);
+        bitmap.close();
+        return createCompressedFromCanvas(canvas);
+      }
+    } catch {
+      // Fall through to non-compressed original file.
     }
-    toast.success("Bilde lastet opp");
-    await refresh();
-  };
+
+    return file;
+  }, []);
+
+  const handleUploadSubmit = useCallback(async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const form = event.currentTarget;
+    const original = new FormData(form);
+    const fileList = original.getAll("files").filter((item): item is File => item instanceof File);
+    if (fileList.length === 0) return;
+
+    setUploading(true);
+    try {
+      const optimizedFiles = await Promise.all(fileList.map((file) => compressImageFile(file)));
+      const payload = new FormData();
+      payload.append("orderId", order.id);
+      payload.append("kind", String(original.get("kind") ?? ""));
+      payload.append("caption", String(original.get("caption") ?? ""));
+      for (const file of optimizedFiles) {
+        payload.append("files", file);
+      }
+
+      const res = await fetch("/api/images/upload", { method: "POST", body: payload });
+      if (!res.ok) {
+        await showApiError(res);
+        return;
+      }
+
+      const body = (await res.json().catch(() => null)) as { count?: number } | null;
+      const count = body?.count ?? 1;
+      toast.success(count > 1 ? `${count} ${t("imageUploadedMultiple")}` : t("imageUploadedSingle"));
+      form.reset();
+      await refresh();
+    } finally {
+      setUploading(false);
+    }
+  }, [compressImageFile, order.id, refresh, showApiError, t]);
 
   const comment = async (formData: FormData) => {
     const payload = { imageId: String(formData.get("imageId")), text: String(formData.get("text")) };
@@ -141,7 +520,7 @@ export function OrderDetailClient({
       body: JSON.stringify(payload),
     });
     if (!res.ok) {
-      toast.error("Kunne ikke kommentere");
+      await showApiError(res);
       return;
     }
     await refresh();
@@ -158,60 +537,282 @@ export function OrderDetailClient({
     });
 
     if (!res.ok) {
-      const body = (await res.json().catch(() => null)) as { error?: string } | null;
-      toast.error(body?.error ?? "Kunne ikke sende melding");
+      await showApiError(res, "cannotSendMessage");
       return;
     }
 
-    await refreshMessages();
+    setNewMessageNotice(false);
+    await refreshMessages({ playAlert: false });
+  };
+
+  const deleteMessage = async (messageId: string) => {
+    const confirmed = window.confirm(t("confirmDeleteMessage"));
+    if (!confirmed) return;
+
+    const res = await fetch(`/api/orders/${order.id}/messages/${messageId}`, {
+      method: "DELETE",
+    });
+    if (!res.ok) {
+      await showApiError(res);
+      return;
+    }
+    toast.success(t("messageDeleted"));
+    await refreshMessages({ playAlert: false });
+  };
+
+  const saveOrderChanges = async (formData: FormData) => {
+    const type = String(formData.get("type") ?? "").trim();
+    const address = String(formData.get("address") ?? "").trim();
+    const dateValue = String(formData.get("date") ?? "").trim();
+    const guestCountValue = String(formData.get("guestCount") ?? "").trim();
+    const note = String(formData.get("note") ?? "").trim();
+
+    if (!type || !address || !dateValue) {
+      toast.error(t("addressDateRequired"));
+      return;
+    }
+    if (type !== "CLEANING" && type !== "KEY_HANDLING") {
+      toast.error(t("invalidServiceType"));
+      return;
+    }
+
+    let guestCount: number | null = null;
+    if (guestCountValue) {
+      const parsedGuestCount = Number(guestCountValue);
+      if (!Number.isInteger(parsedGuestCount) || parsedGuestCount < 1 || parsedGuestCount > 50) {
+        toast.error(t("guestCountRange"));
+        return;
+      }
+      guestCount = parsedGuestCount;
+    }
+
+    const isoDate = new Date(dateValue).toISOString();
+    setSavingEdit(true);
+    const res = await fetch(`/api/orders/${order.id}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        type,
+        address,
+        date: isoDate,
+        guestCount,
+        note: note.length ? note : "",
+      }),
+    });
+    setSavingEdit(false);
+    if (!res.ok) {
+      await showApiError(res);
+      return;
+    }
+
+    toast.success(t("orderUpdated"));
+    setEditing(false);
+    await refresh();
+  };
+
+  const deleteOrder = async () => {
+    const confirmed = window.confirm(t("confirmDeleteOrder"));
+    if (!confirmed) return;
+    setDeleting(true);
+    const res = await fetch(`/api/orders/${order.id}`, { method: "DELETE" });
+    setDeleting(false);
+
+    if (!res.ok) {
+      await showApiError(res);
+      return;
+    }
+
+    toast.success(t("orderDeleted"));
+    router.push("/dashboard");
+    router.refresh();
+  };
+
+  const issueReceipt = async () => {
+    const suggested = String(payment?.amountNok ?? (order.type === "KEY_HANDLING" ? 500 : 600));
+    const raw = window.prompt(t("receiptAmountPrompt"), suggested);
+    if (raw === null) return;
+    const amountNok = Number(raw.trim());
+    if (!Number.isFinite(amountNok) || amountNok < 1) {
+      toast.error(t("invalidAmount"));
+      return;
+    }
+
+    setSendingReceipt(true);
+    const res = await fetch(`/api/orders/${order.id}/receipt`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ amountNok }),
+    });
+    setSendingReceipt(false);
+    if (!res.ok) {
+      await showApiError(res);
+      return;
+    }
+    toast.success(t("receiptSent"));
+    void refreshReceipt();
+    void refreshPayment();
+  };
+
+  const createPayment = async () => {
+    const suggested = String(payment?.amountNok ?? (order.type === "KEY_HANDLING" ? 500 : 600));
+    const raw = window.prompt(t("paymentAmountPrompt"), suggested);
+    if (raw === null) return;
+    const amountNok = Number(raw.trim());
+    if (!Number.isFinite(amountNok) || amountNok < 1) {
+      toast.error(t("invalidAmount"));
+      return;
+    }
+
+    setPaymentBusy(true);
+    const res = await fetch(`/api/orders/${order.id}/payment`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ amountNok }),
+    });
+    setPaymentBusy(false);
+    if (!res.ok) {
+      await showApiError(res);
+      return;
+    }
+    toast.success(t("paymentCreated"));
+    void refreshPayment();
+  };
+
+  const confirmPayment = async () => {
+    const suggested = String(payment?.amountNok ?? (order.type === "KEY_HANDLING" ? 500 : 600));
+    const raw = window.prompt(t("paymentAmountPrompt"), suggested);
+    if (raw === null) return;
+    const amountNok = Number(raw.trim());
+    if (!Number.isFinite(amountNok) || amountNok < 1) {
+      toast.error(t("invalidAmount"));
+      return;
+    }
+
+    setPaymentBusy(true);
+    const res = await fetch(`/api/orders/${order.id}/payment/confirm`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ amountNok }),
+    });
+    setPaymentBusy(false);
+    if (!res.ok) {
+      await showApiError(res);
+      return;
+    }
+    toast.success(t("paymentConfirmed"));
+    void refreshPayment();
+    void refreshReceipt();
   };
 
   const chatContent = (
     <>
       <div className="mb-3 flex items-center justify-between">
-        <h2 className="text-lg font-semibold">Privat chat</h2>
-        <span className="text-xs text-slate-500">Kun mellom utleier og tjenesteutfører</span>
+        <h2 className="text-lg font-semibold">{t("privateChat")}</h2>
+        <span className="text-xs text-slate-500">{t("privateChatHint")}</span>
       </div>
-      <div className="max-h-72 space-y-2 overflow-y-auto rounded border border-slate-200 bg-white p-3">
-        {messages.length === 0 && <p className="text-sm text-slate-500">Ingen meldinger ennå.</p>}
+      {newMessageNotice && (
+        <div className="mb-2 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm font-semibold text-amber-900">
+          {t("newMessageNotice")}
+        </div>
+      )}
+      <div
+        ref={chatScrollRef}
+        className={`max-h-72 space-y-1.5 overflow-y-auto rounded border p-2 transition-colors ${
+          chatHighlighted ? "border-emerald-300 bg-emerald-50" : "border-slate-200 bg-white"
+        }`}
+      >
+        {messages.length === 0 && <p className="text-sm text-slate-500">{t("noMessagesYet")}</p>}
         {messages.map((msg) => (
-          <div key={msg.id} className={`rounded-lg p-2 text-sm ${msg.senderId === currentUserId ? "bg-teal-50" : "bg-slate-100"}`}>
-            <p className="font-medium">{msg.sender.name}</p>
-            <p>{msg.text}</p>
-            <p className="mt-1 text-xs text-slate-500">{new Date(msg.createdAt).toLocaleString("nb-NO", { hour12: false })}</p>
+          <div key={msg.id} className={`rounded-md p-1.5 text-xs ${msg.senderId === currentUserId ? "bg-teal-50" : "bg-slate-100"}`}>
+            <div className="flex items-center justify-between gap-2">
+              <p className="font-medium">{msg.sender.name}</p>
+              {!isReadOnlyChat && msg.senderId === currentUserId && (
+                <button
+                  type="button"
+                  onClick={() => void deleteMessage(msg.id)}
+                  className="text-[11px] text-red-700 underline"
+                >
+                  {t("deleteLabel")}
+                </button>
+              )}
+            </div>
+            <p className="leading-snug">{msg.text}</p>
+            <p className="mt-0.5 text-[11px] text-slate-500">{new Date(msg.createdAt).toLocaleString(locale, { hour12: false })}</p>
           </div>
         ))}
       </div>
-      <form action={sendMessage} className="mt-3 flex gap-2">
-        <input className="input" name="text" placeholder="Skriv melding" required />
-        <button className="btn btn-primary">Send</button>
-      </form>
+      {!isReadOnlyChat && canWorkerSendMessages && (
+        <form action={sendMessage} className="mt-3 flex gap-2">
+          <input className="input" name="text" placeholder={t("writeMessagePlaceholder")} required />
+          <button className="btn btn-primary">{t("send")}</button>
+        </form>
+      )}
+      {!isReadOnlyChat && !canWorkerSendMessages && workerPendingStart && (
+        <p className="mt-3 text-sm text-amber-700">{t("orderStartRequiredHint")}</p>
+      )}
     </>
   );
 
   return (
     <div className="space-y-4">
       <div className="panel p-4 sm:p-5">
+        {typeof order.orderNumber === "number" && (
+          <p className="mb-2 text-sm font-semibold text-slate-600">
+            {t("orderIdNumber")}: <span className="text-slate-900">#{order.orderNumber}</span>
+          </p>
+        )}
         <div className="flex items-center justify-between gap-2">
-          <h1 className="text-2xl font-bold">Oppdrag</h1>
+          <h1 className="text-2xl font-bold">{t("orderTitle")}</h1>
           <StatusBadge status={order.status} />
         </div>
         <p className="mt-2 text-sm text-slate-600">
-          {order.type} | {order.address}
+          {orderTypeLabel} | {order.address}
         </p>
-        <a href={mapUrl} target="_blank" rel="noopener noreferrer" className="text-sm text-teal-700 underline">
-          {t("openMap")} i Google Maps
-        </a>
-        <p className="mt-2 text-sm text-slate-600">Utleier: {order.landlord.name}</p>
-        <p className="text-sm text-slate-600">Tildelt: {order.assignedTo?.name ?? "Ingen"}</p>
-        {role === "TJENESTE" && landlordMail && (
-          <a href={landlordMail} className="mt-2 inline-block text-sm text-teal-700 underline">
-            {t("contactLandlord")}
+        <p className="text-sm text-slate-600">{new Date(order.date).toLocaleString(locale, { hour12: false })}</p>
+        <div className="mt-3 flex flex-wrap gap-3">
+          <a
+            href={mapUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="group block h-[110px] w-[135px] max-w-full overflow-hidden rounded-xl border border-teal-300 bg-white shadow-sm transition hover:border-teal-400 hover:shadow"
+            aria-label={t("openMap")}
+            title={t("openMap")}
+          >
+            <iframe
+              title={t("mapPreviewTitle")}
+              src={`https://www.google.com/maps?q=${encodeURIComponent(order.address)}&output=embed`}
+              loading="lazy"
+              referrerPolicy="no-referrer-when-downgrade"
+              className="pointer-events-none h-[90px] w-full border-0"
+            />
+            <div className="flex h-[20px] items-center justify-between border-t border-slate-200 bg-teal-50 px-3 text-[11px] font-semibold text-teal-900">
+              <span>{t("miniMap")}</span>
+              <span className="underline decoration-transparent group-hover:decoration-current">{t("openMap")}</span>
+            </div>
           </a>
-        )}
-        {role === "UTLEIER" && workerMail && (
-          <a href={workerMail} className="mt-2 inline-block text-sm text-teal-700 underline">
-            {t("contactWorker")}
+        </div>
+        <p className="mt-2 text-sm text-slate-600">
+          {t("landlordLabel")}:{" "}
+          <Link href={`/users/${order.landlord.id}`} className="font-semibold text-slate-900 underline">
+            {order.landlord.name}
+          </Link>
+        </p>
+        <p className="text-sm text-slate-600">
+          {t("assignedLabel")}:{" "}
+          {order.assignedTo ? (
+            <span className="inline-flex items-center">
+              <Link href={`/users/${order.assignedTo.id}`} className="font-semibold text-slate-900 underline">
+                {order.assignedTo.name}
+              </Link>
+              {renderWorkerRating(order.assignedTo.averageRating, order.assignedTo.reviewCount)}
+            </span>
+          ) : (
+            t("noneAssigned")
+          )}
+        </p>
+        {isPrivateChatParticipant && canUseJobChat && (
+          <a href="#job-chat" className="mt-2 ml-3 inline-block text-sm font-semibold text-teal-700 underline">
+            Chat
           </a>
         )}
         {role === "ADMIN" && (
@@ -229,79 +830,371 @@ export function OrderDetailClient({
           </div>
         )}
         {order.note && <p className="mt-2 rounded bg-slate-100 p-2 text-sm">{order.note}</p>}
+        {workerPendingStart && (
+          <div className="mt-3 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm font-semibold text-amber-900">
+            {t("orderStartRequiredHint")}
+          </div>
+        )}
+
+        {(role === "UTLEIER" || role === "ADMIN") && (
+          <div className="mt-4 rounded border border-slate-200 p-3">
+            <div className="mb-2 flex items-center justify-between">
+              <p className="text-sm font-semibold">{t("manageOrder")}</p>
+              <button
+                type="button"
+                className="text-sm text-teal-700 underline"
+                onClick={() => {
+                  setEditValues({
+                    type: order.type,
+                    address: order.address,
+                    date: new Date(order.date).toISOString().slice(0, 16),
+                    guestCount: order.guestCount ? String(order.guestCount) : "",
+                    note: order.note ?? "",
+                  });
+                  setEditing((prev) => !prev);
+                }}
+              >
+                {editing ? t("cancel") : t("edit")}
+              </button>
+            </div>
+
+            {editing && (
+              <form action={saveOrderChanges} className="grid gap-2">
+                <select
+                  className="input"
+                  name="type"
+                  value={editValues.type}
+                  onChange={(e) => setEditValues((prev) => ({ ...prev, type: e.target.value }))}
+                  required
+                >
+                  <option value="CLEANING">CLEANING</option>
+                  <option value="KEY_HANDLING">KEY_HANDLING</option>
+                </select>
+                <input
+                  className="input"
+                  name="address"
+                  value={editValues.address}
+                  onChange={(e) => setEditValues((prev) => ({ ...prev, address: e.target.value }))}
+                  placeholder={t("address")}
+                  required
+                />
+                <input
+                  className="input"
+                  type="datetime-local"
+                  name="date"
+                  value={editValues.date}
+                  onChange={(e) => setEditValues((prev) => ({ ...prev, date: e.target.value }))}
+                  required
+                />
+                <div className="rounded-xl border-2 border-teal-300 bg-teal-50 p-2">
+                  <label className="mb-1 block text-sm font-bold text-slate-900">{t("guestCount")}</label>
+                  <span className="mb-2 inline-flex rounded-full bg-amber-200 px-2 py-0.5 text-[11px] font-bold text-amber-900">
+                    {t("importantField")}
+                  </span>
+                  <input
+                    className="input border-amber-400 bg-white text-sm font-semibold"
+                    type="number"
+                    min={1}
+                    max={50}
+                    name="guestCount"
+                    value={editValues.guestCount}
+                    onChange={(e) => setEditValues((prev) => ({ ...prev, guestCount: e.target.value }))}
+                    placeholder={t("guestCountPlaceholder")}
+                  />
+                </div>
+                <textarea
+                  className="input"
+                  name="note"
+                  value={editValues.note}
+                  onChange={(e) => setEditValues((prev) => ({ ...prev, note: e.target.value }))}
+                  placeholder={t("notePlaceholder")}
+                />
+                <button className="btn btn-primary w-fit" type="submit" disabled={savingEdit}>
+                  {savingEdit ? t("saving") : t("saveChanges")}
+                </button>
+              </form>
+            )}
+
+            <button type="button" className="btn btn-danger mt-3" onClick={deleteOrder} disabled={deleting}>
+              {deleting ? t("deleteOrderBusy") : t("deleteOrderAction")}
+            </button>
+          </div>
+        )}
+        {order.type === "CLEANING" && order.guestCount ? (
+          <div className="mt-3 rounded bg-slate-50 p-3 text-sm">
+            <div
+              className="mb-2 flex max-w-full items-center justify-between rounded-md border-2 border-amber-400 bg-amber-50 shadow-sm ring-1 ring-amber-200"
+              style={{ width: 140, height: 36, paddingInline: 8 }}
+            >
+              <span className="font-bold uppercase text-amber-900" style={{ fontSize: 9, letterSpacing: "0.05em" }}>
+                {t("guestCount")}
+              </span>
+              <span
+                className="rounded-md bg-amber-200 font-extrabold leading-none text-amber-950"
+                style={{ fontSize: 18, padding: "2px 6px" }}
+              >
+                {order.guestCount}
+              </span>
+            </div>
+          </div>
+        ) : null}
+
+        {(role === "UTLEIER" || role === "ADMIN") && (
+          <div className="mt-3 rounded bg-slate-50 p-3 text-sm">
+            <div className="mb-3 rounded-xl border border-slate-200 bg-white p-3">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <p className="font-semibold">{t("paymentSectionTitle")}</p>
+                <span className="rounded-full bg-slate-100 px-2 py-1 text-xs font-semibold text-slate-700">
+                  {payment?.status === "paid"
+                    ? t("paymentStatusPaid")
+                    : payment?.status === "pending"
+                      ? t("paymentStatusPending")
+                      : t("paymentStatusNotStarted")}
+                </span>
+              </div>
+              <p className="mt-2 text-sm text-slate-600">
+                {t("paymentAmountLabel")}: <span className="font-semibold text-slate-900">{payment?.amountNok ?? 0} NOK</span>
+              </p>
+              {payment?.paidAt ? (
+                <p className="mt-1 text-sm text-slate-600">
+                  {t("paymentPaidAtLabel")}: {new Date(payment.paidAt).toLocaleString(locale, { hour12: false })}
+                </p>
+              ) : null}
+              <div className="mt-3 flex flex-wrap items-center gap-2">
+                {payment?.status !== "paid" ? (
+                  <>
+                    <button className="btn btn-secondary" type="button" onClick={() => void createPayment()} disabled={paymentBusy}>
+                      {paymentBusy ? t("saving") : t("paymentCreateAction")}
+                    </button>
+                    <button className="btn btn-primary" type="button" onClick={() => void confirmPayment()} disabled={paymentBusy}>
+                      {paymentBusy ? t("saving") : t("paymentConfirmAction")}
+                    </button>
+                  </>
+                ) : (
+                  <button className="btn btn-secondary" type="button" onClick={() => void issueReceipt()} disabled={sendingReceipt}>
+                    {sendingReceipt ? t("sendReceiptBusy") : t("paymentResendReceipt")}
+                  </button>
+                )}
+              </div>
+            </div>
+            <div className="mb-2 flex flex-wrap items-center gap-2">
+              {payment?.status === "paid" && !receipt ? (
+                <button className="btn btn-secondary" type="button" onClick={() => void issueReceipt()} disabled={sendingReceipt}>
+                  {sendingReceipt ? t("sendReceiptBusy") : t("sendReceipt")}
+                </button>
+              ) : null}
+              {receipt ? (
+                <a href={receipt.downloadUrl} target="_blank" rel="noreferrer" className="text-teal-700 underline">
+                  {t("receiptLabel")} {receipt.receiptNumber} ({receipt.amountNok} NOK)
+                </a>
+              ) : null}
+            </div>
+            <p className="font-semibold">{t("completionDetails")}</p>
+            {order.completionNote || order.completionChecklist ? (
+              <>
+                {order.completionNote ? <p className="mt-1">{order.completionNote}</p> : null}
+                {order.completionChecklist ? (
+                  <ul className="mt-2 list-disc pl-5">
+                    {Object.entries(order.completionChecklist).map(([key, done]) => (
+                      <li key={key}>
+                        {done ? t("statusOk") : t("checklistMissing")} - {formatChecklistLabel(key)}
+                      </li>
+                    ))}
+                  </ul>
+                ) : null}
+              </>
+            ) : (
+              <p className="mt-1 text-slate-500">{t("noCompletionDetails")}</p>
+            )}
+          </div>
+        )}
+
+        {role === "ADMIN" && (
+          <div className="mt-3 rounded border border-slate-200 bg-white p-3 text-sm">
+            <p className="font-semibold">{t("workerChecklist")}</p>
+            <ul className="mt-2 space-y-1">
+              {checklistKeys.map((key) => {
+                const done = completionChecklist[key] === true;
+                return (
+                  <li key={key} className="flex items-center justify-between rounded bg-slate-50 px-2 py-1">
+                    <span>{formatChecklistLabel(key)}</span>
+                    <span className={done ? "text-emerald-700" : "text-slate-500"}>{done ? t("statusOk") : t("checklistMissing")}</span>
+                  </li>
+                );
+              })}
+            </ul>
+          </div>
+        )}
 
         {(role === "TJENESTE" || role === "ADMIN") && (
           <div className="mt-3 flex flex-wrap gap-2">
-            <button className="btn btn-secondary" onClick={() => updateStatus("IN_PROGRESS")}>
-              Start
-            </button>
-            <button className="btn btn-primary" onClick={() => updateStatus("COMPLETED")}>
-              Marker fullført
-            </button>
+            {!order.assignedTo && (
+              <button className="btn btn-primary" disabled={claiming} onClick={() => void claimJob()}>
+                {claiming ? "..." : t("takeJob")}
+              </button>
+            )}
+            {canStartOrder && (
+              <button
+                className={startAvailableNow ? "btn btn-danger" : "btn btn-secondary"}
+                disabled={statusSaving}
+                onClick={() => updateStatus("IN_PROGRESS")}
+              >
+                {statusSaving ? t("saving") : t("startAction")}
+              </button>
+            )}
           </div>
+        )}
+
+        {canWorkerComplete && (
+          <form action={completeWithChecklist} className="mt-4 rounded border border-slate-200 p-3">
+            <p className="text-sm font-semibold">{t("workerChecklist")}</p>
+            <div className="mt-2 grid gap-2 text-sm sm:grid-cols-2">
+              <label><input type="checkbox" name="bedReady" /> {formatChecklistLabel("bedReady")}</label>
+              <label><input type="checkbox" name="bathroomClean" /> {t("bathroomClean")}</label>
+              <label><input type="checkbox" name="kitchenClean" /> {t("kitchenClean")}</label>
+              <label><input type="checkbox" name="floorsVacuumed" /> {t("floorsVacuumed")}</label>
+              <label><input type="checkbox" name="trashHandled" /> {t("trashHandled")}</label>
+              <label><input type="checkbox" name="keysHandled" /> {t("keysHandled")}</label>
+              <label><input type="checkbox" name="towelsPrepared" /> {formatChecklistLabel("towelsPrepared")}</label>
+              <label><input type="checkbox" name="suppliesRefilled" /> {t("suppliesRefilled")}</label>
+              <label><input type="checkbox" name="allRoomsPhotographed" /> {t("allRoomsPhotographed")}</label>
+            </div>
+            <textarea className="input mt-3" name="completionNote" placeholder={t("completionNote")} />
+            <button className="btn btn-primary mt-3" disabled={completing} type="submit">
+              {completing ? t("sending") : t("completeWithNote")}
+            </button>
+          </form>
         )}
 
         {role === "ADMIN" && (
           <form action={assign} className="mt-4 flex flex-wrap gap-2">
             <select name="assignedToId" className="input max-w-sm" defaultValue="">
               <option value="" disabled>
-                Velg tjenesteutfører
+                {t("selectWorker")}
               </option>
               {workers.map((worker) => (
                 <option key={worker.id} value={worker.id}>
                   {worker.name}
+                  {worker.averageRating && worker.reviewCount ? ` - ★ ${worker.averageRating.toFixed(1)} (${worker.reviewCount})` : ""}
                 </option>
               ))}
             </select>
-            <button className="btn btn-primary">Tildel</button>
+            <button className="btn btn-primary" disabled={assignSaving}>{assignSaving ? t("assigning") : t("assignAction")}</button>
+          </form>
+        )}
+
+        {(role === "UTLEIER" || role === "ADMIN") && order.status === "COMPLETED" && order.assignedTo && (
+          <form action={submitReview} className="mt-4 rounded border border-slate-200 p-3">
+            <p className="text-sm font-semibold">{t("reviewWorker")}</p>
+            <div className="mt-2 grid gap-2 sm:grid-cols-2">
+              <label className="text-sm sm:col-span-2">
+                <span className="mb-1 block">{t("rating")}</span>
+                <input type="hidden" name="rating" value={selectedReviewRating} />
+                <div className="flex flex-wrap gap-2">
+                  {[1, 2, 3, 4, 5].map((star) => {
+                    const active = star <= selectedReviewRating;
+                    return (
+                      <button
+                        key={star}
+                        type="button"
+                        onClick={() => setSelectedReviewRating(star)}
+                        className={`inline-flex h-11 w-11 items-center justify-center rounded-full border text-2xl transition ${
+                          active
+                            ? "border-amber-400 bg-amber-100 text-amber-600"
+                            : "border-slate-300 bg-white text-slate-400"
+                        }`}
+                        aria-label={`${t("reviewStarLabel")} ${star}`}
+                        title={`${star}/5`}
+                      >
+                        ★
+                      </button>
+                    );
+                  })}
+                </div>
+                <span className="mt-2 block text-xs text-slate-500">{t("reviewPrompt")}</span>
+              </label>
+              <label className="text-sm sm:col-span-2">
+                <span className="mb-1 block">{t("reviewComment")}</span>
+                <textarea name="comment" className="input" placeholder={t("reviewTextPlaceholder")} required />
+              </label>
+            </div>
+            <button className="btn btn-primary mt-3" type="submit" disabled={reviewing}>
+              {reviewing ? t("sending") : t("send")}
+            </button>
           </form>
         )}
       </div>
 
       {isPrivateChatParticipant && (
-        <section className="panel hidden p-4 sm:block sm:p-5">{chatContent}</section>
+        <section id="job-chat" className={`panel p-4 sm:p-5 transition-colors ${chatHighlighted ? "ring-2 ring-emerald-300" : ""}`}>
+          {canUseJobChat ? (
+            chatContent
+          ) : (
+            <div>
+              <h2 className="text-lg font-semibold">{t("privateChat")}</h2>
+              <p className="mt-1 text-sm text-slate-600">{t("chatPendingHint")}</p>
+            </div>
+          )}
+        </section>
       )}
 
-      {(role === "TJENESTE" || role === "ADMIN") && (
-        <form action={upload} className="panel flex flex-wrap items-end gap-2 p-4 sm:p-5">
+      {canWorkerUpload && (
+        <form onSubmit={(event) => void handleUploadSubmit(event)} className="panel flex flex-wrap items-end gap-2 p-4 sm:p-5">
           <div>
-            <label className="mb-1 block text-sm">Bilde</label>
-            <input type="file" className="input" name="file" required />
+            <label className="mb-1 block text-sm">{t("uploadImage")}</label>
+            <input type="file" className="input" name="files" accept="image/*" multiple required />
           </div>
           <div>
-            <label className="mb-1 block text-sm">Type</label>
+            <label className="mb-1 block text-sm">{t("uploadType")}</label>
             <select name="kind" className="input">
-              <option value="before">Før</option>
-              <option value="after">Etter</option>
+              <option value="before">{t("beforeLabel")}</option>
+              <option value="after">{t("afterLabel")}</option>
             </select>
           </div>
           <div>
-            <label className="mb-1 block text-sm">Kommentar</label>
+            <label className="mb-1 block text-sm">{t("commentLabel")}</label>
             <input name="caption" className="input" />
           </div>
-          <button className="btn btn-primary">Last opp</button>
+          <button className="btn btn-primary" disabled={uploading}>{uploading ? t("sending") : t("uploadAction")}</button>
         </form>
       )}
 
-      {role === "UTLEIER" && (
+      {(role === "UTLEIER" || role === "ADMIN") && (
         <section className="panel p-4 sm:p-5">
-          <h2 className="text-lg font-semibold">Bilder av din leilighet</h2>
-          <p className="mt-1 text-sm text-slate-600">Antall bilder fra tjenesteutfører: {landlordImageCount}</p>
+          <h2 className="text-lg font-semibold">{t("orderImagesTitle")}</h2>
+          <p className="mt-1 text-sm text-slate-600">{t("workerImageCountLabel")}: {landlordImageCount}</p>
+        </section>
+      )}
+
+      {order.images.length === 0 && (
+        <section className="panel p-4 sm:p-5">
+          <p className="text-sm text-slate-500">{t("noImagesYet")}</p>
         </section>
       )}
 
       <div className="grid gap-4 md:grid-cols-2">
-        {order.images.map((image) => (
+        {visibleImages.map((image) => (
           <div key={image.id} className="panel p-4">
-            <Image
-              src={image.url}
-              alt="order"
-              width={800}
-              height={500}
-              unoptimized={image.url.startsWith("data:")}
-              className="h-56 w-full rounded object-cover"
-            />
-            <p className="mt-2 text-xs uppercase text-slate-500">{image.kind ?? "bilde"}</p>
+            <div className="relative h-56 w-full overflow-hidden rounded">
+              {!loadedImageIds[image.id] && (
+                <div className="absolute inset-0 animate-pulse bg-slate-200" aria-hidden="true" />
+              )}
+              <Image
+                src={image.url}
+                alt="order"
+                width={800}
+                height={500}
+                loading="lazy"
+                unoptimized={image.url.startsWith("data:")}
+                className={`h-56 w-full object-cover transition-opacity duration-300 ${
+                  loadedImageIds[image.id] ? "opacity-100" : "opacity-0"
+                }`}
+                onLoad={() => {
+                  setLoadedImageIds((prev) => (prev[image.id] ? prev : { ...prev, [image.id]: true }));
+                }}
+              />
+            </div>
+            <p className="mt-2 text-xs uppercase text-slate-500">{image.kind ?? t("uploadImage").toLowerCase()}</p>
             <p className="text-sm">{image.caption}</p>
             <div className="mt-2 space-y-2 text-sm">
               {image.comments.map((item) => (
@@ -310,40 +1203,31 @@ export function OrderDetailClient({
                 </div>
               ))}
             </div>
-            <form action={comment} className="mt-3 flex gap-2">
-              <input type="hidden" name="imageId" value={image.id} />
-              <input className="input" name="text" placeholder="Skriv kommentar" required />
-              <button className="btn btn-secondary">Send</button>
-            </form>
+            {canCommentOnImages ? (
+              <form action={comment} className="mt-3 flex gap-2">
+                <input type="hidden" name="imageId" value={image.id} />
+                <input className="input" name="text" placeholder={t("writeComment")} required />
+                <button className="btn btn-secondary">{t("send")}</button>
+              </form>
+            ) : (
+              <p className="mt-3 text-sm text-amber-700">{t("orderStartRequiredHint")}</p>
+            )}
           </div>
         ))}
       </div>
 
-      {isPrivateChatParticipant && (
-        <>
+      {hasMoreImages && (
+        <div className="flex justify-center">
           <button
             type="button"
-            onClick={() => setChatOpen(true)}
-            className="fixed bottom-5 right-5 z-40 rounded-full bg-teal-700 px-4 py-3 text-sm font-semibold text-white shadow-lg sm:hidden"
+            className="btn btn-secondary"
+            onClick={() => setVisibleImageCount((prev) => prev + 12)}
           >
-            Chat
+            {t("showMoreImages")}
           </button>
-
-          {chatOpen && (
-            <div className="fixed inset-0 z-50 flex items-end bg-black/30 sm:hidden">
-              <div className="max-h-[82vh] w-full rounded-t-2xl bg-white p-4">
-                <div className="mb-3 flex items-center justify-between">
-                  <h3 className="font-semibold">Chat</h3>
-                  <button type="button" className="text-sm text-slate-600 underline" onClick={() => setChatOpen(false)}>
-                    Lukk
-                  </button>
-                </div>
-                {chatContent}
-              </div>
-            </div>
-          )}
-        </>
+        </div>
       )}
+
     </div>
   );
 }

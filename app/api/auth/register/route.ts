@@ -1,4 +1,4 @@
-import bcrypt from "bcryptjs";
+﻿import bcrypt from "bcryptjs";
 import { NextResponse } from "next/server";
 import { Prisma, ProfileMode, Role } from "@prisma/client";
 import { ZodError } from "zod";
@@ -10,7 +10,18 @@ export async function POST(req: Request) {
     const body = await req.json();
     const data = registerSchema.parse(body);
 
-    const exists = await prisma.user.findUnique({ where: { email: data.email } });
+    const normalizedEmail = data.email.trim().toLowerCase();
+
+    const exists = await prisma.user.findFirst({
+      where: {
+        email: {
+          equals: normalizedEmail,
+          mode: "insensitive",
+        },
+      },
+      select: { id: true },
+    });
+
     if (exists) {
       return NextResponse.json({ code: "EMAIL_EXISTS", error: "Email already exists" }, { status: 409 });
     }
@@ -27,7 +38,8 @@ export async function POST(req: Request) {
     const user = await prisma.user.create({
       data: {
         name: data.name,
-        email: data.email,
+        email: normalizedEmail,
+        phone: data.phone,
         password,
         ...profile,
       },
@@ -35,6 +47,7 @@ export async function POST(req: Request) {
         id: true,
         name: true,
         email: true,
+        phone: true,
         role: true,
         canLandlord: true,
         canService: true,

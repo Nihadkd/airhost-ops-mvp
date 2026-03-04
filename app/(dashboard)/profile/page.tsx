@@ -19,6 +19,8 @@ export default async function ProfilePage() {
         canService: !!session.user.canService,
         activeMode: session.user.activeMode ?? "UTLEIER",
         effectiveRole: session.user.role,
+        accountRole: session.user.accountRole,
+        adminViewMode: session.user.adminViewMode ?? "ADMIN",
       }}
     />
   );

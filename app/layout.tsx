@@ -3,8 +3,8 @@ import "./globals.css";
 import { Providers } from "./providers";
 
 export const metadata: Metadata = {
-  title: "AirHost Ops",
-  description: "MVP for Airbnb driftsadministrasjon",
+  title: "ServNest",
+  description: "ServNest - administrasjon av oppdrag, meldinger og varsler",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

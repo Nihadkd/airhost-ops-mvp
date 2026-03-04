@@ -13,7 +13,7 @@ export type PaymentIntent = {
 export async function createPaymentIntent(input: PaymentIntentInput): Promise<PaymentIntent> {
   return {
     provider: "stub",
-    id: `pi_${input.orderId}`,
+    id: `pi_${input.orderId}_${input.amountNok}`,
     status: "pending",
   };
 }

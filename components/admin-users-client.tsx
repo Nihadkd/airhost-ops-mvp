@@ -2,17 +2,55 @@
 
 import { useState } from "react";
 import toast from "react-hot-toast";
+import { useLanguage } from "@/lib/language-context";
+import { toUserErrorMessage } from "@/lib/client-error";
 
 type User = {
   id: string;
   name: string;
   email: string;
+  phone: string | null;
   role: "ADMIN" | "UTLEIER" | "TJENESTE";
   isActive: boolean;
+  canLandlord: boolean;
+  canService: boolean;
+  activeMode: "UTLEIER" | "TJENESTE";
+  createdAt: string | Date;
+  _count: {
+    landlordOrders: number;
+    assignedOrders: number;
+    reviewsWritten: number;
+    reviewsReceived: number;
+    pushTokens: number;
+  };
 };
 
 export function AdminUsersClient({ initialUsers }: { initialUsers: User[] }) {
   const [users, setUsers] = useState(initialUsers);
+  const { t, lang } = useLanguage();
+  const totalUsers = users.length;
+  const activeUsers = users.filter((u) => u.isActive).length;
+  const admins = users.filter((u) => u.role === "ADMIN").length;
+  const landlords = users.filter((u) => u.role === "UTLEIER").length;
+  const workers = users.filter((u) => u.role === "TJENESTE").length;
+  const locale = lang === "no" ? "nb-NO" : "en-US";
+  const formatCreatedAt = (value: string | Date) => {
+    const date = value instanceof Date ? value : new Date(value);
+    if (Number.isNaN(date.getTime())) return "-";
+    return date.toLocaleDateString(locale);
+  };
+  const getRoleLabel = (role: User["role"]) => {
+    if (role === "ADMIN") return t("roleAdmin");
+    if (role === "UTLEIER") return t("roleLandlord");
+    return t("roleWorker");
+  };
+  const getAccessLabel = (user: User) => {
+    if (user.canLandlord && user.canService) return t("landlordAndWorkerAccess");
+    if (user.canLandlord) return t("roleLandlord");
+    if (user.canService) return t("roleWorker");
+    return "-";
+  };
+  const getModeLabel = (mode: User["activeMode"]) => (mode === "UTLEIER" ? t("viewAsLandlord") : t("viewAsWorker"));
 
   const refresh = async () => {
     const res = await fetch("/api/users", { cache: "no-store" });
@@ -24,6 +62,7 @@ export function AdminUsersClient({ initialUsers }: { initialUsers: User[] }) {
     const payload = {
       name: String(formData.get("name")),
       email: String(formData.get("email")),
+      phone: String(formData.get("phone")),
       password: String(formData.get("password")),
       role: String(formData.get("role")),
     };
@@ -35,11 +74,11 @@ export function AdminUsersClient({ initialUsers }: { initialUsers: User[] }) {
     });
 
     if (!res.ok) {
-      toast.error("Kunne ikke opprette bruker");
+      toast.error(await toUserErrorMessage(res, t, "genericError"));
       return;
     }
 
-    toast.success("Bruker opprettet");
+    toast.success(t("userCreated"));
     await refresh();
   };
 
@@ -49,47 +88,98 @@ export function AdminUsersClient({ initialUsers }: { initialUsers: User[] }) {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ isActive: !user.isActive }),
     });
-    if (!res.ok) return toast.error("Kunne ikke oppdatere bruker");
+    if (!res.ok) {
+      toast.error(await toUserErrorMessage(res, t, "genericError"));
+      return;
+    }
+    toast.success(t("userUpdated"));
+    await refresh();
+  };
+
+  const deleteUser = async (user: User) => {
+    const confirmed = window.confirm(`${t("confirmDeleteUser")} ${user.name}?`);
+    if (!confirmed) return;
+
+    const res = await fetch(`/api/users/${user.id}`, {
+      method: "DELETE",
+    });
+    if (!res.ok) {
+      toast.error(await toUserErrorMessage(res, t, "deleteUserFailed"));
+      return;
+    }
+    toast.success(t("userDeleted"));
     await refresh();
   };
 
   return (
     <div className="space-y-6">
       <form action={createUser} className="panel grid gap-3 p-5 md:grid-cols-2">
-        <h2 className="md:col-span-2 text-lg font-semibold">Opprett bruker</h2>
-        <input className="input" name="name" placeholder="Navn" required />
-        <input className="input" type="email" name="email" placeholder="E-post" required />
-        <input className="input" type="password" name="password" placeholder="Passord" required />
+        <h2 className="md:col-span-2 text-lg font-semibold">{t("createUserTitle")}</h2>
+        <input className="input" name="name" placeholder={t("name")} required />
+        <input className="input" type="email" name="email" placeholder={t("email")} required />
+        <input className="input" type="tel" name="phone" placeholder={t("phone")} required />
+        <input className="input" type="password" name="password" placeholder={t("password")} required />
         <select className="input" name="role" defaultValue="UTLEIER">
-          <option value="UTLEIER">UTLEIER</option>
-          <option value="TJENESTE">TJENESTE</option>
-          <option value="ADMIN">ADMIN</option>
+          <option value="UTLEIER">{t("roleLandlord")}</option>
+          <option value="TJENESTE">{t("roleWorker")}</option>
+          <option value="ADMIN">{t("roleAdmin")}</option>
         </select>
-        <button className="btn btn-primary md:col-span-2" type="submit">Opprett</button>
+        <button className="btn btn-primary md:col-span-2" type="submit">{t("create")}</button>
       </form>
 
-      <div className="panel overflow-x-auto p-5">
-        <h2 className="mb-3 text-lg font-semibold">Alle brukere</h2>
+      <div id="delete" className="panel overflow-x-auto p-5">
+        <h2 className="mb-3 text-lg font-semibold">{t("allUsersTitle")}</h2>
+        <div className="mb-4 grid gap-2 text-sm sm:grid-cols-2 lg:grid-cols-5">
+          <div className="rounded-lg border border-slate-200 bg-white px-3 py-2"><strong>{t("totalLabel")}:</strong> {totalUsers}</div>
+          <div className="rounded-lg border border-slate-200 bg-white px-3 py-2"><strong>{t("activePluralLabel")}:</strong> {activeUsers}</div>
+          <div className="rounded-lg border border-slate-200 bg-white px-3 py-2"><strong>{t("adminsLabel")}:</strong> {admins}</div>
+          <div className="rounded-lg border border-slate-200 bg-white px-3 py-2"><strong>{t("landlordsLabel")}:</strong> {landlords}</div>
+          <div className="rounded-lg border border-slate-200 bg-white px-3 py-2"><strong>{t("workersLabel")}:</strong> {workers}</div>
+        </div>
         <table className="w-full text-left text-sm">
           <thead>
             <tr className="border-b border-slate-200">
-              <th className="pb-2">Navn</th>
-              <th className="pb-2">E-post</th>
-              <th className="pb-2">Rolle</th>
-              <th className="pb-2">Status</th>
-              <th className="pb-2">Handling</th>
+              <th className="pb-2">ID</th>
+              <th className="pb-2">{t("name")}</th>
+              <th className="pb-2">{t("email")}</th>
+              <th className="pb-2">{t("phone")}</th>
+              <th className="pb-2">{t("role")}</th>
+              <th className="pb-2">{t("permissionsLabel")}</th>
+              <th className="pb-2">{t("activeModeLabel")}</th>
+              <th className="pb-2">{t("createdLabel")}</th>
+              <th className="pb-2">{t("landlordOrdersLabel")}</th>
+              <th className="pb-2">{t("assignedOrdersLabel")}</th>
+              <th className="pb-2">{t("pushLabel")}</th>
+              <th className="pb-2">{t("userStatus")}</th>
+              <th className="pb-2">{t("action")}</th>
+              <th className="pb-2">{t("deleteUser")}</th>
             </tr>
           </thead>
           <tbody>
             {users.map((user) => (
               <tr key={user.id} className="border-b border-slate-100">
+                <td className="py-2 font-mono text-xs">{user.id.slice(0, 8)}</td>
                 <td className="py-2">{user.name}</td>
                 <td className="py-2">{user.email}</td>
-                <td className="py-2">{user.role}</td>
-                <td className="py-2">{user.isActive ? "Aktiv" : "Deaktivert"}</td>
+                <td className="py-2">{user.phone ?? "-"}</td>
+                <td className="py-2">{getRoleLabel(user.role)}</td>
+                <td className="py-2">{getAccessLabel(user)}</td>
+                <td className="py-2">{getModeLabel(user.activeMode)}</td>
+                <td className="py-2">{formatCreatedAt(user.createdAt)}</td>
+                <td className="py-2">{user._count.landlordOrders}</td>
+                <td className="py-2">{user._count.assignedOrders}</td>
+                <td className="py-2">{user._count.pushTokens}</td>
+                <td className="py-2">{user.isActive ? t("userActive") : t("userInactive")}</td>
                 <td className="py-2">
-                  <button className="btn btn-secondary" onClick={() => toggleActive(user)}>
-                    {user.isActive ? "Deaktiver" : "Aktiver"}
+                  <div className="flex flex-wrap gap-2">
+                    <button className="btn btn-secondary" onClick={() => toggleActive(user)}>
+                      {user.isActive ? t("deactivate") : t("activate")}
+                    </button>
+                  </div>
+                </td>
+                <td className="py-2">
+                  <button className="btn btn-danger whitespace-nowrap" onClick={() => void deleteUser(user)}>
+                    {t("deleteUser")}
                   </button>
                 </td>
               </tr>

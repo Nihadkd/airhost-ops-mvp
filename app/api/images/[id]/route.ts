@@ -6,11 +6,12 @@ import { apiError, handleApiError } from "@/lib/api";
 export async function PUT(req: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
     const session = await requireAuth();
+    const isAdmin = session.user.accountRole === "ADMIN" || session.user.role === "ADMIN";
     const { id } = await params;
     const image = await prisma.image.findUnique({ where: { id } });
     if (!image) return apiError(404, "Image not found");
 
-    const canEdit = session.user.role === "ADMIN" || image.uploadedById === session.user.id;
+    const canEdit = isAdmin || image.uploadedById === session.user.id;
     if (!canEdit) return apiError(403, "Forbidden");
 
     const body = await req.json();
@@ -31,12 +32,13 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
 export async function DELETE(_: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
     const session = await requireAuth();
+    const isAdmin = session.user.accountRole === "ADMIN" || session.user.role === "ADMIN";
     const { id } = await params;
 
     const image = await prisma.image.findUnique({ where: { id } });
     if (!image) return apiError(404, "Image not found");
 
-    const canDelete = session.user.role === "ADMIN" || image.uploadedById === session.user.id;
+    const canDelete = isAdmin || image.uploadedById === session.user.id;
     if (!canDelete) return apiError(403, "Forbidden");
 
     await prisma.image.delete({ where: { id } });
