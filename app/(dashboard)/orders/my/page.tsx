@@ -92,7 +92,7 @@ export default function MyOrdersPage() {
 
   const fetchData = useCallback(async () => {
     const res = await fetch(`/api/dashboard${queryString}`, { cache: "no-store" });
-    if (!res.ok) return false;
+    if (!res.ok) return res.status;
     const data = (await res.json()) as DashboardPayload;
     setOrders(data.orders);
     if (data.filters?.status) {
@@ -101,15 +101,19 @@ export default function MyOrdersPage() {
     }
     setTotalPages(data.pagination.totalPages);
     setTotal(data.pagination.total);
-    return true;
+    return 200;
   }, [queryString]);
 
   useEffect(() => {
     let mounted = true;
     const run = async () => {
-      const ok = await fetchData();
-      if (!ok && mounted) {
-        toast.error(t("loginUnknownError"));
+      const status = await fetchData();
+      if (mounted && (status === 401 || status === 403)) {
+        router.replace("/login");
+        return;
+      }
+      if (mounted && status !== 200) {
+        toast.error(t("genericError"));
       }
       if (mounted) setLoading(false);
     };
