@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
+const CANONICAL_HOST = "servnest.no";
+
 function buildContentSecurityPolicy() {
   return [
     "default-src 'self'",
@@ -19,7 +21,13 @@ function buildContentSecurityPolicy() {
 }
 
 export default function proxy(request: NextRequest) {
-  void request;
+  const hostname = request.nextUrl.hostname.toLowerCase();
+  if (process.env.NODE_ENV === "production" && hostname.endsWith(".vercel.app")) {
+    const redirectUrl = request.nextUrl.clone();
+    redirectUrl.hostname = CANONICAL_HOST;
+    redirectUrl.protocol = "https:";
+    return NextResponse.redirect(redirectUrl, 308);
+  }
 
   const response = NextResponse.next();
   response.headers.set("Referrer-Policy", "strict-origin-when-cross-origin");
