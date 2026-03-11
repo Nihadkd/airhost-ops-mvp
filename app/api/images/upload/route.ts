@@ -14,9 +14,12 @@ export async function POST(req: Request) {
     }
 
     const formData = await req.formData();
-    const files = formData.getAll("files").filter((item): item is File => item instanceof File);
+    const files = formData
+      .getAll("files")
+      .filter((item): item is File => item instanceof File)
+      .filter((file) => file.size > 0 && file.name.trim().length > 0);
     const fallbackFile = formData.get("file");
-    if (files.length === 0 && fallbackFile instanceof File) {
+    if (files.length === 0 && fallbackFile instanceof File && fallbackFile.size > 0 && fallbackFile.name.trim().length > 0) {
       files.push(fallbackFile);
     }
     const orderId = String(formData.get("orderId") ?? "");

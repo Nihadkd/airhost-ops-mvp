@@ -3,7 +3,8 @@ import { prisma } from "@/lib/prisma";
 import { requireAuth } from "@/lib/rbac";
 import { apiError, handleApiError } from "@/lib/api";
 import { contactUserSchema } from "@/lib/validators";
-import { sendPushToUser } from "@/lib/push";
+import { sendDirectContactEmail } from "@/lib/email-notifications";
+import { notifyUserEvent } from "@/lib/user-event-notifications";
 
 export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
@@ -15,24 +16,31 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     const parsed = contactUserSchema.safeParse(body);
     if (!parsed.success) return apiError(400, "Invalid payload");
 
-    const target = await prisma.user.findUnique({ where: { id }, select: { id: true } });
+    const target = await prisma.user.findUnique({ where: { id }, select: { id: true, name: true, email: true } });
     if (!target) return apiError(404, "User not found");
 
-    const notification = await prisma.notification.create({
-      data: {
-        userId: id,
-        actorUserId: session.user.id,
-        message: `Ny melding fra ${session.user.name}: ${parsed.data.message}`,
-        targetUrl: "/messages",
+    const result = await notifyUserEvent({
+      recipient: {
+        userId: target.id,
+        email: target.email,
+        name: target.name,
       },
-    });
-    await sendPushToUser(id, {
-      title: "Ny melding",
-      body: `Ny melding fra ${session.user.name}`,
-      data: { type: "direct_contact", path: "/messages" },
+      actorUserId: session.user.id,
+      message: `Ny melding fra ${session.user.name}: ${parsed.data.message}`,
+      targetUrl: "/messages",
+      push: {
+        title: "Ny melding",
+        body: `Ny melding fra ${session.user.name}`,
+        data: { type: "direct_contact", path: "/messages" },
+      },
+      email: () =>
+        sendDirectContactEmail({
+          to: { email: target.email, name: target.name },
+          fromName: session.user.name || "ServNest-bruker",
+        }),
     });
 
-    return NextResponse.json(notification, { status: 201 });
+    return NextResponse.json(result.notification, { status: 201 });
   } catch (error) {
     return handleApiError(error);
   }

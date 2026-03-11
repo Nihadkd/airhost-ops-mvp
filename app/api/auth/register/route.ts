@@ -1,15 +1,38 @@
-﻿import bcrypt from "bcryptjs";
+import bcrypt from "bcryptjs";
 import { NextResponse } from "next/server";
 import { Prisma, ProfileMode, Role } from "@prisma/client";
 import { ZodError } from "zod";
 import { prisma } from "@/lib/prisma";
 import { registerSchema } from "@/lib/validators";
+import { hasMailConfiguration } from "@/lib/env";
+import { signToken } from "@/lib/secure-token";
+import { sendRegistrationVerificationEmail } from "@/lib/auth-email";
+
+type RegisterVerifyPayload = {
+  type: "register";
+  exp: number;
+  payload: {
+    name: string;
+    email: string;
+    phone: string;
+    password: string;
+    profile: {
+      role: Role;
+      canLandlord: boolean;
+      canService: boolean;
+      activeMode: ProfileMode;
+    };
+  };
+};
 
 export async function POST(req: Request) {
   try {
+    if (!hasMailConfiguration()) {
+      return NextResponse.json({ code: "MAIL_NOT_CONFIGURED", error: "Email service unavailable" }, { status: 503 });
+    }
+
     const body = await req.json();
     const data = registerSchema.parse(body);
-
     const normalizedEmail = data.email.trim().toLowerCase();
 
     const exists = await prisma.user.findFirst({
@@ -21,13 +44,11 @@ export async function POST(req: Request) {
       },
       select: { id: true },
     });
-
     if (exists) {
       return NextResponse.json({ code: "EMAIL_EXISTS", error: "Email already exists" }, { status: 409 });
     }
 
     const password = await bcrypt.hash(data.password, 10);
-
     const profile =
       data.role === "TJENESTE"
         ? { role: Role.TJENESTE, canLandlord: false, canService: true, activeMode: ProfileMode.TJENESTE }
@@ -35,28 +56,25 @@ export async function POST(req: Request) {
           ? { role: Role.UTLEIER, canLandlord: true, canService: true, activeMode: ProfileMode.UTLEIER }
           : { role: Role.UTLEIER, canLandlord: true, canService: false, activeMode: ProfileMode.UTLEIER };
 
-    const user = await prisma.user.create({
-      data: {
-        name: data.name,
+    const tokenPayload: RegisterVerifyPayload = {
+      type: "register",
+      exp: Date.now() + 1000 * 60 * 60 * 24,
+      payload: {
+        name: data.name.trim(),
         email: normalizedEmail,
-        phone: data.phone,
+        phone: data.phone.trim(),
         password,
-        ...profile,
+        profile,
       },
-      select: {
-        id: true,
-        name: true,
-        email: true,
-        phone: true,
-        role: true,
-        canLandlord: true,
-        canService: true,
-        activeMode: true,
-        createdAt: true,
-      },
-    });
+    };
 
-    return NextResponse.json(user, { status: 201 });
+    const token = signToken(tokenPayload);
+    const mail = await sendRegistrationVerificationEmail({ to: normalizedEmail, token });
+    if (!mail.sent) {
+      return NextResponse.json({ code: "MAIL_SEND_FAILED", error: "Could not send verification email" }, { status: 503 });
+    }
+
+    return NextResponse.json({ success: true }, { status: 202 });
   } catch (error) {
     if (error instanceof ZodError) {
       return NextResponse.json({ code: "INVALID_PAYLOAD", error: "Invalid payload" }, { status: 400 });

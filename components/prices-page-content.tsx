@@ -66,8 +66,8 @@ export function PricesPageContent() {
                 <path d="m4 7 8 6 8-6" />
               </svg>
             </span>
-            <a href="mailto:Serven3st@gmail.com" className="font-medium underline">
-              Serven3st@gmail.com
+            <a href="mailto:Servn3st@gmail.com" className="font-medium underline">
+              Servn3st@gmail.com
             </a>
           </p>
           <p className="flex items-center gap-2">

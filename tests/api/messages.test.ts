@@ -27,7 +27,7 @@ describe("/api/orders/[id]/messages", () => {
 
   it("allows landlord to read own order chat", async () => {
     vi.mocked(requireAuth).mockResolvedValue({ user: { id: "l1", role: "UTLEIER" } } as never);
-    vi.mocked(prisma.serviceOrder.findUnique).mockResolvedValue({ id: "o1", landlordId: "l1", assignedToId: "t1", status: "IN_PROGRESS" } as never);
+    vi.mocked(prisma.serviceOrder.findUnique).mockResolvedValue({ id: "o1", landlordId: "l1", assignedToId: "t1", status: "IN_PROGRESS", orderNumber: 10 } as never);
     vi.mocked(prisma.message.findMany).mockResolvedValue([] as never);
 
     const res = await GET(new Request("http://localhost"), { params: Promise.resolve({ id: "o1" }) });
@@ -36,8 +36,13 @@ describe("/api/orders/[id]/messages", () => {
 
   it("creates chat message to counterpart", async () => {
     vi.mocked(requireAuth).mockResolvedValue({ user: { id: "l1", role: "UTLEIER" } } as never);
-    vi.mocked(prisma.serviceOrder.findUnique).mockResolvedValue({ id: "o1", landlordId: "l1", assignedToId: "t1", status: "IN_PROGRESS" } as never);
-    vi.mocked(prisma.message.create).mockResolvedValue({ id: "m1", text: "Hei" } as never);
+    vi.mocked(prisma.serviceOrder.findUnique).mockResolvedValue({ id: "o1", landlordId: "l1", assignedToId: "t1", status: "IN_PROGRESS", orderNumber: 10 } as never);
+    vi.mocked(prisma.message.create).mockResolvedValue({
+      id: "m1",
+      text: "Hei",
+      sender: { id: "l1", name: "Landlord", role: "UTLEIER" },
+      recipient: { id: "t1", name: "Worker", role: "TJENESTE", email: "worker@example.com" },
+    } as never);
 
     const req = new Request("http://localhost", {
       method: "POST",
@@ -47,13 +52,21 @@ describe("/api/orders/[id]/messages", () => {
 
     const res = await POST(req, { params: Promise.resolve({ id: "o1" }) });
     expect(res.status).toBe(201);
+    expect(vi.mocked(prisma.notification.create)).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          userId: "t1",
+          targetUrl: "/orders/o1#msg-m1",
+        }),
+      }),
+    );
     expect(vi.mocked(sendPushToUser)).toHaveBeenCalledWith(
       "t1",
       expect.objectContaining({
         title: "Ny melding",
         data: expect.objectContaining({
           orderId: "o1",
-          path: "/orders/o1",
+          path: "/orders/o1#msg-m1",
           type: "message",
         }),
       }),
@@ -62,7 +75,7 @@ describe("/api/orders/[id]/messages", () => {
 
   it("deletes own chat message", async () => {
     vi.mocked(requireAuth).mockResolvedValue({ user: { id: "l1", role: "UTLEIER" } } as never);
-    vi.mocked(prisma.serviceOrder.findUnique).mockResolvedValue({ id: "o1", landlordId: "l1", assignedToId: "t1", status: "IN_PROGRESS" } as never);
+    vi.mocked(prisma.serviceOrder.findUnique).mockResolvedValue({ id: "o1", landlordId: "l1", assignedToId: "t1", status: "IN_PROGRESS", orderNumber: 10 } as never);
     vi.mocked(prisma.message.findUnique).mockResolvedValue({ id: "m1", orderId: "o1", senderId: "l1" } as never);
     vi.mocked(prisma.message.delete).mockResolvedValue({ id: "m1" } as never);
 
@@ -75,7 +88,7 @@ describe("/api/orders/[id]/messages", () => {
 
   it("blocks worker from sending chat message before START", async () => {
     vi.mocked(requireAuth).mockResolvedValue({ user: { id: "t1", role: "TJENESTE" } } as never);
-    vi.mocked(prisma.serviceOrder.findUnique).mockResolvedValue({ id: "o1", landlordId: "l1", assignedToId: "t1", status: "PENDING" } as never);
+    vi.mocked(prisma.serviceOrder.findUnique).mockResolvedValue({ id: "o1", landlordId: "l1", assignedToId: "t1", status: "PENDING", orderNumber: 10 } as never);
 
     const req = new Request("http://localhost", {
       method: "POST",

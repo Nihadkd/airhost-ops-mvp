@@ -1,0 +1,20 @@
+{
+  "count": 3,
+  "values": [
+    {
+      "index": 0,
+      "tag": "select",
+      "type": ""
+    },
+    {
+      "index": 1,
+      "tag": "input",
+      "type": ""
+    },
+    {
+      "index": 2,
+      "tag": "select",
+      "type": ""
+    }
+  ]
+}

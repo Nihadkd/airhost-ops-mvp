@@ -4,12 +4,13 @@ import { requireAuth } from "@/lib/rbac";
 import { apiError, handleApiError } from "@/lib/api";
 import { canAssignedWorkerWriteOrder, isAssignedWorkerPendingStart } from "@/lib/order-worker-access";
 import { messageCreateSchema } from "@/lib/validators";
-import { sendPushToUser } from "@/lib/push";
+import { sendOrderMessageEmail } from "@/lib/email-notifications";
+import { notifyUserEvent } from "@/lib/user-event-notifications";
 
 async function getOrderIfParticipant(orderId: string, userId: string, isAdmin: boolean) {
   const order = await prisma.serviceOrder.findUnique({
     where: { id: orderId },
-    select: { id: true, landlordId: true, assignedToId: true, status: true },
+    select: { id: true, landlordId: true, assignedToId: true, status: true, orderNumber: true },
   });
   if (!order) return { ok: false as const, order: null };
 
@@ -33,7 +34,7 @@ export async function GET(_: Request, { params }: { params: Promise<{ id: string
       orderBy: { createdAt: "asc" },
       include: {
         sender: { select: { id: true, name: true, role: true } },
-        recipient: { select: { id: true, name: true, role: true } },
+        recipient: { select: { id: true, name: true, role: true, email: true } },
       },
     });
 
@@ -85,21 +86,33 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       },
       include: {
         sender: { select: { id: true, name: true, role: true } },
-        recipient: { select: { id: true, name: true, role: true } },
+        recipient: { select: { id: true, name: true, role: true, email: true } },
       },
     });
+    const senderName = message.sender?.name?.trim() || session.user.name?.trim() || "Bruker";
+    const notificationText = `Ny melding fra ${senderName}`;
 
-    await prisma.notification.create({
-      data: {
+    await notifyUserEvent({
+      recipient: {
         userId: recipientId,
-        message: "Du har fått en ny melding i oppdragschatten.",
-        targetUrl: `/orders/${id}`,
+        email: message.recipient?.email,
+        name: message.recipient?.name,
       },
-    });
-    await sendPushToUser(recipientId, {
-      title: "Ny melding",
-      body: "Du har fått en ny melding i oppdragschatten.",
-      data: { orderId: id, type: "message", path: `/orders/${id}` },
+      actorUserId: session.user.id,
+      message: notificationText,
+      targetUrl: `/orders/${id}#msg-${message.id}`,
+      push: {
+        title: "Ny melding",
+        body: notificationText,
+        data: { orderId: id, type: "message", path: `/orders/${id}#msg-${message.id}` },
+      },
+      email: () =>
+        sendOrderMessageEmail({
+          to: { email: message.recipient?.email, name: message.recipient?.name },
+          orderId: id,
+          orderNumber: access.order.orderNumber,
+          senderName,
+        }),
     });
 
     return NextResponse.json(message, { status: 201 });
@@ -107,5 +120,3 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     return handleApiError(error);
   }
 }
-
-

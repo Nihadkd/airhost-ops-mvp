@@ -3,8 +3,9 @@ import { prisma } from "@/lib/prisma";
 import { requireRole } from "@/lib/rbac";
 import { apiError, handleApiError } from "@/lib/api";
 import { assignSchema } from "@/lib/validators";
-import { sendPushToUser } from "@/lib/push";
 import { sendAssignedOrderSms } from "@/lib/sms";
+import { sendOrderAssignedEmail } from "@/lib/email-notifications";
+import { notifyUserEvent } from "@/lib/user-event-notifications";
 
 export async function PUT(req: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
@@ -21,18 +22,26 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
       data: { assignedToId: data.assignedToId, status: "PENDING" },
     });
 
-    await prisma.notification.create({
-      data: {
+    await notifyUserEvent({
+      recipient: {
         userId: data.assignedToId,
-        message: `Nytt oppdrag tildelt: ${order.address}`,
-        targetUrl: `/orders/${id}`,
+        email: worker.email,
+        name: worker.name,
       },
-    });
-
-    await sendPushToUser(data.assignedToId, {
-      title: "Nytt oppdrag tildelt",
-      body: `Du har fått et nytt oppdrag: ${order.address}`,
-      data: { orderId: id, type: "order_assigned", path: `/orders/${id}` },
+      message: `Nytt oppdrag tildelt: ${order.address}`,
+      targetUrl: `/orders/${id}`,
+      push: {
+        title: "Nytt oppdrag tildelt",
+        body: `Du har fått et nytt oppdrag: ${order.address}`,
+        data: { orderId: id, type: "order_assigned", path: `/orders/${id}` },
+      },
+      email: () =>
+        sendOrderAssignedEmail({
+          to: { email: worker.email, name: worker.name },
+          orderId: id,
+          orderNumber: order.orderNumber,
+          address: order.address,
+        }),
     });
 
     await sendAssignedOrderSms({

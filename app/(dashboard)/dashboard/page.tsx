@@ -227,6 +227,11 @@ export default function DashboardPage() {
     setPage(1);
     setFilters((prev) => ({ ...prev, [key]: value }));
   };
+  const formatCompletedAt = (value: string) => {
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return "-";
+    return date.toLocaleString(locale, { hour12: false });
+  };
 
   const role = me?.effectiveRole;
   const isAdmin = role === "ADMIN";
@@ -344,7 +349,9 @@ export default function DashboardPage() {
             >
               <div className="flex items-start justify-between gap-2">
                 <p className="font-semibold">#{order.orderNumber} {getTypeLabel(order.type)}</p>
-                <StatusBadge status={order.status} />
+                <div className="min-w-[110px] text-right">
+                  <StatusBadge status={order.status} />
+                </div>
               </div>
               <div className="mt-2">
                 <PaymentBadge status={order.paymentStatus} />
@@ -358,7 +365,7 @@ export default function DashboardPage() {
                 {order.assignedTo ? <span className="font-semibold text-slate-900">{order.assignedTo.name}</span> : "-"}
               </p>
               <p className="mt-2 text-sm text-slate-700">{order.address}</p>
-              <div className="mt-1 flex gap-3 text-xs">
+              <div className="mt-1 flex items-center justify-between gap-3 text-xs">
                 <a
                   href={mapUrl(order.address)}
                   target="_blank"
@@ -368,7 +375,11 @@ export default function DashboardPage() {
                 >
                   {t("openMap")}
                 </a>
-                <span className="text-slate-500">{new Date(order.date).toLocaleString(locale, { hour12: false })}</span>
+                <span className="text-right text-[11px] font-semibold text-slate-600">
+                  {order.status === "COMPLETED"
+                    ? formatCompletedAt(order.updatedAt)
+                    : new Date(order.date).toLocaleString(locale, { hour12: false })}
+                </span>
               </div>
             </div>
           ))}
@@ -436,7 +447,7 @@ export default function DashboardPage() {
                   <td className="py-2">
                     {order.assignedTo ? <span className="font-semibold text-slate-900">{order.assignedTo.name}</span> : "-"}
                   </td>
-                  <td className="py-2">{new Date(order.createdAt).toLocaleDateString(locale)}</td>
+                  <td className="py-2">{new Date(order.date).toLocaleString(locale, { hour12: false })}</td>
                   <td className="py-2">
                     {order.status === "COMPLETED"
                       ? new Date(order.updatedAt).toLocaleString(locale, { hour12: false })
@@ -461,8 +472,8 @@ export default function DashboardPage() {
                 <path d="m4 7 8 6 8-6" />
               </svg>
             </span>
-            <a href="mailto:Serven3st@gmail.com" className="font-medium underline">
-              Serven3st@gmail.com
+            <a href="mailto:Servn3st@gmail.com" className="font-medium underline">
+              Servn3st@gmail.com
             </a>
           </p>
           <p className="flex items-center gap-2">

@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { signIn, useSession } from "next-auth/react";
+import { useSession } from "next-auth/react";
 import { useEffect, useState } from "react";
 import { useLanguage } from "@/lib/language-context";
 import { toUserErrorMessage } from "@/lib/client-error";
@@ -11,6 +11,7 @@ export default function RegisterPage() {
   const router = useRouter();
   const { status } = useSession();
   const [error, setError] = useState("");
+  const [success, setSuccess] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const { lang, setLang, t } = useLanguage();
@@ -23,6 +24,7 @@ export default function RegisterPage() {
 
   const submit = async (formData: FormData) => {
     setError("");
+    setSuccess("");
     setLoading(true);
     const payload = {
       name: String(formData.get("name")),
@@ -30,6 +32,7 @@ export default function RegisterPage() {
       phone: String(formData.get("phone")),
       password: String(formData.get("password")),
       role: String(formData.get("role") || "UTLEIER"),
+      acceptedTerms: formData.get("acceptedTerms") === "on",
     };
 
     const res = await fetch("/api/auth/register", {
@@ -44,14 +47,8 @@ export default function RegisterPage() {
       return;
     }
 
-    const loginRes = await signIn("credentials", { email: payload.email, password: payload.password, redirect: false });
-    if (!loginRes?.ok) {
-      setLoading(false);
-      setError(t("registerAutoLoginFailed"));
-      return;
-    }
-
-    router.push("/dashboard");
+    setSuccess(t("registerVerifyEmailSent"));
+    setLoading(false);
   };
 
   return (
@@ -78,7 +75,22 @@ export default function RegisterPage() {
           <option value="TJENESTE">{t("roleWorkerOnly")}</option>
           <option value="BEGGE">{t("roleBoth")}</option>
         </select>
+        <label className="flex items-start gap-2 rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700">
+          <input className="mt-0.5" type="checkbox" name="acceptedTerms" required />
+          <span>
+            Jeg godtar{" "}
+            <Link href="/terms" className="font-semibold underline">
+              vilkarene
+            </Link>{" "}
+            og{" "}
+            <Link href="/privacy" className="font-semibold underline">
+              personvernerklaringen
+            </Link>
+            . Jeg forstar at avtaler og betaling for oppdrag opprettet i ServNest skal gjennomfores i appen.
+          </span>
+        </label>
         {error && <p className="text-sm text-red-600">{error}</p>}
+        {success && <p className="text-sm text-teal-700">{success}</p>}
         <button className="btn btn-primary w-full" type="submit" disabled={loading}>
           {loading ? "..." : t("register")}
         </button>

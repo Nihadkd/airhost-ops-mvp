@@ -5,7 +5,9 @@ import { apiError, handleApiError } from "@/lib/api";
 import { canAssignedWorkerStartOrder, canAssignedWorkerWriteOrder } from "@/lib/order-worker-access";
 import { getStartAvailabilityForWorker, startOrderForWorker } from "@/lib/services/order-start-service";
 import { orderUpdateSchema } from "@/lib/validators";
-import { sendPushToUser } from "@/lib/push";
+import { sendOrderCompletedEmail } from "@/lib/email-notifications";
+import { extractDeadlineAt, splitOrderNote, withDeadlineMetadata } from "@/lib/order-deadline";
+import { notifyUserEvent } from "@/lib/user-event-notifications";
 
 async function canView(orderId: string, userId: string, role: string, isAdminAccount: boolean) {
   const order = await prisma.serviceOrder.findUnique({ where: { id: orderId } });
@@ -46,8 +48,11 @@ export async function GET(_: Request, { params }: { params: Promise<{ id: string
         ? await getStartAvailabilityForWorker(order.id, session.user.id)
         : { canStart: false, blockedByOrderId: null, blockedByOrderNumber: null };
 
+    const split = splitOrderNote(order.note);
     return NextResponse.json({
       ...order,
+      note: split.note,
+      deadlineAt: split.deadlineAt,
       canStart: startAvailability.canStart,
       startBlockedByOrderId: startAvailability.blockedByOrderId,
       startBlockedByOrderNumber: startAvailability.blockedByOrderNumber,
@@ -81,7 +86,7 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
       data.date = new Date(parsed.data.date);
     }
     if (parsed.data.note !== undefined && (isAdminAccount || session.user.role === "ADMIN" || session.user.role === "UTLEIER")) {
-      data.note = parsed.data.note;
+      data.note = withDeadlineMetadata(parsed.data.note, extractDeadlineAt(access.order.note));
     }
     if (parsed.data.guestCount !== undefined && (isAdminAccount || session.user.role === "ADMIN" || session.user.role === "UTLEIER")) {
       data.guestCount = parsed.data.guestCount;
@@ -91,14 +96,8 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
       if (isAdminAccount || session.user.role === "ADMIN") {
         data.status = parsed.data.status;
       }
-      if (
-        session.user.role === "TJENESTE" &&
-        access.order.assignedToId === session.user.id
-      ) {
-        if (
-          parsed.data.status === "IN_PROGRESS" &&
-          canAssignedWorkerStartOrder(access.order, session.user.id, false)
-        ) {
+      if (session.user.role === "TJENESTE" && access.order.assignedToId === session.user.id) {
+        if (parsed.data.status === "IN_PROGRESS" && canAssignedWorkerStartOrder(access.order, session.user.id, false)) {
           const started = await startOrderForWorker({
             orderId: id,
             workerId: session.user.id,
@@ -110,10 +109,7 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
             code: "WORKER_SEQUENCE_BLOCKED",
           });
         }
-        if (
-          parsed.data.status === "COMPLETED" &&
-          canAssignedWorkerWriteOrder(access.order, session.user.id, false)
-        ) {
+        if (parsed.data.status === "COMPLETED" && canAssignedWorkerWriteOrder(access.order, session.user.id, false)) {
           data.status = parsed.data.status;
           data.completionNote = parsed.data.completionNote ?? null;
           data.completionChecklist = parsed.data.completionChecklist ?? null;
@@ -124,21 +120,34 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
     const updated = await prisma.serviceOrder.update({ where: { id }, data });
 
     if (session.user.role === "TJENESTE" && parsed.data.status === "COMPLETED") {
-      const doneMessage = `Oppdrag #${access.order.orderNumber} er fullført. Vennligst gå gjennom oppdraget og legg igjen vurdering.`;
-
-      await prisma.notification.create({
-        data: {
-          userId: access.order.landlordId,
+      const doneMessage = `Oppdrag #${access.order.orderNumber} er utført og klart for betaling.`;
+      const landlord = await prisma.user.findUnique({
+        where: { id: access.order.landlordId },
+        select: { id: true, email: true, name: true },
+      });
+      if (landlord) {
+        await notifyUserEvent({
+          recipient: {
+            userId: landlord.id,
+            email: landlord.email,
+            name: landlord.name,
+          },
           actorUserId: session.user.id,
           message: doneMessage,
           targetUrl: `/orders/${id}`,
-        },
-      });
-      await sendPushToUser(access.order.landlordId, {
-        title: "Oppdrag fullført",
-        body: doneMessage,
-        data: { orderId: id, type: "order_completed", path: `/orders/${id}` },
-      });
+          push: {
+            title: "Oppdrag utført",
+            body: doneMessage,
+            data: { orderId: id, type: "order_completed", path: `/orders/${id}` },
+          },
+          email: () =>
+            sendOrderCompletedEmail({
+              to: { email: landlord.email, name: landlord.name },
+              orderId: id,
+              orderNumber: access.order.orderNumber,
+            }),
+        });
+      }
     }
 
     return NextResponse.json(updated);

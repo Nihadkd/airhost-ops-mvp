@@ -3,6 +3,8 @@ import { apiError, handleApiError } from "@/lib/api";
 import { requireAuth } from "@/lib/rbac";
 import { claimOrderForWorker } from "@/lib/services/order-claim-service";
 import { orderIdParamSchema } from "@/lib/validators";
+import { prisma } from "@/lib/prisma";
+import { sendOrderClaimedEmail } from "@/lib/email-notifications";
 
 export async function PUT(_: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
@@ -22,6 +24,19 @@ export async function PUT(_: Request, { params }: { params: Promise<{ id: string
       workerId: session.user.id,
       workerName: session.user.name,
     });
+
+    const landlord = await prisma.user.findUnique({
+      where: { id: order.landlordId },
+      select: { id: true, email: true, name: true },
+    });
+    if (landlord) {
+      await sendOrderClaimedEmail({
+        to: { email: landlord.email, name: landlord.name },
+        orderId: order.id,
+        orderNumber: order.orderNumber,
+        workerName: session.user.name || "Tjenesteutfører",
+      });
+    }
 
     return NextResponse.json(order);
   } catch (error) {

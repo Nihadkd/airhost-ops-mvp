@@ -73,16 +73,10 @@ export function NotificationPopup() {
         notifyBrowser(freshItems[0]);
       }
 
-      const samePageHidden = data.filter((item) => item.targetUrl && item.targetUrl.split("?")[0] === pathname);
-      if (samePageHidden.length > 0) {
-        void Promise.allSettled(
-          samePageHidden.map((item) => fetch(`/api/notifications/${item.id}/read`, { method: "PUT" })),
-        );
-      }
-
-      const visibleItems = data.filter((item) => !item.targetUrl || item.targetUrl.split("?")[0] !== pathname);
-      setItems(visibleItems);
-      if (visibleItems.length > 0) setPopupOpen(true);
+      // Keep notifications visible even when user is already on target page.
+      // Auto-marking as read here can make important events appear "lost".
+      setItems(data);
+      if (data.length > 0) setPopupOpen(true);
     };
     void run();
     const poll = setInterval(() => {

@@ -4,7 +4,9 @@ import { prisma } from "@/lib/prisma";
 import { requireAuth } from "@/lib/rbac";
 import { apiError, handleApiError } from "@/lib/api";
 import { orderCreateSchema } from "@/lib/validators";
-import { sendPushToUser } from "@/lib/push";
+import { sendOrderCreatedEmail } from "@/lib/email-notifications";
+import { withDeadlineMetadata } from "@/lib/order-deadline";
+import { notifyUserEvent } from "@/lib/user-event-notifications";
 
 export async function GET() {
   try {
@@ -54,19 +56,33 @@ export async function POST(req: Request) {
       return apiError(400, "landlordId is required for admin-created orders");
     }
     const landlordId = isAdmin && data.landlordId ? data.landlordId : session.user.id;
+    let landlordRecipient: { email: string; name: string } | null = null;
     if (isAdmin) {
       const landlord = await prisma.user.findUnique({
         where: { id: landlordId },
-        select: { id: true, isActive: true, canLandlord: true, name: true },
+        select: { id: true, isActive: true, canLandlord: true, name: true, email: true },
       });
       if (!landlord || !landlord.isActive || !landlord.canLandlord) {
         return apiError(400, "Selected landlord is invalid");
       }
+      landlordRecipient = { email: landlord.email, name: landlord.name };
     }
     const date = new Date(data.date);
+    const deadlineAt = new Date(data.deadlineAt);
     const minutes = date.getUTCMinutes();
     if ((minutes !== 0 && minutes !== 30) || date.getUTCSeconds() !== 0 || date.getUTCMilliseconds() !== 0) {
       return apiError(400, "Order date must be on the hour or half hour");
+    }
+    const deadlineMinutes = deadlineAt.getUTCMinutes();
+    if (
+      (deadlineMinutes !== 0 && deadlineMinutes !== 30) ||
+      deadlineAt.getUTCSeconds() !== 0 ||
+      deadlineAt.getUTCMilliseconds() !== 0
+    ) {
+      return apiError(400, "Order deadline must be on the hour or half hour");
+    }
+    if (deadlineAt.getTime() <= date.getTime()) {
+      return apiError(400, "Order deadline must be after start time");
     }
 
     const duplicate = await prisma.serviceOrder.findFirst({
@@ -88,25 +104,36 @@ export async function POST(req: Request) {
         type: data.type,
         address: data.address,
         date,
-        note: data.note,
+        note: withDeadlineMetadata(data.note, deadlineAt.toISOString()),
         guestCount: data.guestCount ?? null,
         landlordId,
       },
     });
 
     if (isAdmin) {
-      await prisma.notification.create({
-        data: {
+      await notifyUserEvent({
+        recipient: {
           userId: landlordId,
-          actorUserId: session.user.id,
-          message: `Nytt oppdrag er opprettet for deg: ${order.address}`,
-          targetUrl: `/orders/${order.id}`,
+          email: landlordRecipient?.email,
+          name: landlordRecipient?.name,
         },
-      });
-      await sendPushToUser(landlordId, {
-        title: "Nytt oppdrag opprettet",
-        body: `Et nytt oppdrag er opprettet for deg: ${order.address}`,
-        data: { orderId: order.id, type: "order_created", path: `/orders/${order.id}` },
+        actorUserId: session.user.id,
+        message: `Nytt oppdrag er opprettet for deg: ${order.address}`,
+        targetUrl: `/orders/${order.id}`,
+        push: {
+          title: "Nytt oppdrag opprettet",
+          body: `Et nytt oppdrag er opprettet for deg: ${order.address}`,
+          data: { orderId: order.id, type: "order_created", path: `/orders/${order.id}` },
+        },
+        email: landlordRecipient
+          ? () =>
+              sendOrderCreatedEmail({
+                to: landlordRecipient,
+                orderId: order.id,
+                orderNumber: order.orderNumber,
+                address: order.address,
+              })
+          : null,
       });
     }
 

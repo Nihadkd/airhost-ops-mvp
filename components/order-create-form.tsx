@@ -81,12 +81,26 @@ export function OrderCreateForm({
       toast.error(t("timeSlotHalfHourOnly"));
       return;
     }
+    const deadlineDatePart = String(formData.get("deadlineDate"));
+    const deadlineTimePart = String(formData.get("deadlineTime"));
+    const rawDeadline = `${deadlineDatePart}T${deadlineTimePart}`;
+    if (!deadlineDatePart || !deadlineTimePart || !isHalfHourSlot(rawDeadline)) {
+      toast.error(t("timeSlotHalfHourOnly"));
+      return;
+    }
+    const startDate = new Date(rawDate);
+    const deadlineDate = new Date(rawDeadline);
+    if (deadlineDate.getTime() <= startDate.getTime()) {
+      toast.error(t("deadlineAfterStart"));
+      return;
+    }
 
     setLoading(true);
     const payload = {
       type: String(formData.get("type")),
       address: String(formData.get("address")),
       date: new Date(rawDate).toISOString(),
+      deadlineAt: deadlineDate.toISOString(),
       note: String(formData.get("note") || ""),
       guestCount: Number(formData.get("guestCount") || 0) || undefined,
       landlordId: selectedLandlordId,
@@ -142,7 +156,7 @@ export function OrderCreateForm({
         </label>
       )}
       <label className="block">
-        <span className="mb-1 block text-sm text-slate-600">{t("dateLabel")}</span>
+        <span className="mb-1 block text-sm text-slate-600">{t("startDateTimeLabel")}</span>
         <div className="grid gap-3 sm:grid-cols-2">
           <input type="date" name="date" className="input" required />
           <select name="time" className="input" defaultValue="" required>
@@ -157,6 +171,23 @@ export function OrderCreateForm({
           </select>
         </div>
         <span className="mt-1 block text-xs text-slate-500">{t("timeSlotHalfHourOnly")}</span>
+      </label>
+      <label className="block">
+        <span className="mb-1 block text-sm text-slate-600">{t("deadlineDateTimeLabel")}</span>
+        <div className="grid gap-3 sm:grid-cols-2">
+          <input type="date" name="deadlineDate" className="input" required />
+          <select name="deadlineTime" className="input" defaultValue="" required>
+            <option value="" disabled>
+              {t("selectTime")}
+            </option>
+            {TIME_OPTIONS.map((time) => (
+              <option key={`deadline-${time}`} value={time}>
+                {time}
+              </option>
+            ))}
+          </select>
+        </div>
+        <span className="mt-1 block text-xs text-slate-500">{t("deadlineAfterStartHint")}</span>
       </label>
       <label className="block">
         <span className="mb-1 block text-sm font-bold text-slate-900">{t("guestCount")}</span>

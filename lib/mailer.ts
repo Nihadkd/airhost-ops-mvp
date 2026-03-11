@@ -1,3 +1,5 @@
+import { env } from "@/lib/env";
+
 type MailInput = {
   to: string;
   subject: string;
@@ -9,8 +11,8 @@ export type MailResult =
   | { sent: false; reason: "not_configured" | "provider_error" };
 
 export async function sendMail(input: MailInput): Promise<MailResult> {
-  const apiKey = process.env.RESEND_API_KEY?.trim();
-  const from = process.env.RECEIPT_FROM_EMAIL?.trim();
+  const apiKey = env.RESEND_API_KEY?.trim();
+  const from = env.RECEIPT_FROM_EMAIL?.trim();
 
   if (!apiKey || !from) {
     return { sent: false, reason: "not_configured" };

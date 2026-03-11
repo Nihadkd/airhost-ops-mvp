@@ -33,11 +33,13 @@ type ImageItem = {
 type Order = {
   id: string;
   orderNumber?: number;
+  updatedAt: string | Date;
   canStart?: boolean;
   startBlockedByOrderId?: string | null;
   startBlockedByOrderNumber?: number | null;
   address: string;
   date: string | Date;
+  deadlineAt?: string | null;
   note: string | null;
   guestCount?: number | null;
   completionNote?: string | null;
@@ -66,7 +68,7 @@ type ReceiptSummary = {
 };
 type PaymentSummary = {
   status: "not_started" | "pending" | "paid";
-  provider: "stub";
+  provider: "stub" | "vipps" | "stripe";
   amountNok: number;
   paymentIntent: string | null;
   receiptId: string | null;
@@ -91,19 +93,25 @@ export function OrderDetailClient({
   const [claiming, setClaiming] = useState(false);
   const [assignSaving, setAssignSaving] = useState(false);
   const [completing, setCompleting] = useState(false);
+  const [completeConfirmOpen, setCompleteConfirmOpen] = useState(false);
+  const [pendingCompletionFormData, setPendingCompletionFormData] = useState<FormData | null>(null);
   const [reviewing, setReviewing] = useState(false);
   const [selectedReviewRating, setSelectedReviewRating] = useState(5);
   const [editing, setEditing] = useState(false);
   const [savingEdit, setSavingEdit] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [sendingReceipt, setSendingReceipt] = useState(false);
+  const [sendingPaymentReminder, setSendingPaymentReminder] = useState(false);
   const [receipt, setReceipt] = useState<ReceiptSummary | null>(null);
   const [payment, setPayment] = useState<PaymentSummary | null>(null);
   const [paymentBusy, setPaymentBusy] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [visibleImageCount, setVisibleImageCount] = useState(12);
   const [loadedImageIds, setLoadedImageIds] = useState<Record<string, true>>({});
+  const [fullscreenImageUrl, setFullscreenImageUrl] = useState<string | null>(null);
+  const [fullscreenZoom, setFullscreenZoom] = useState(1);
   const [chatHighlighted, setChatHighlighted] = useState(false);
+  const [focusedMessageId, setFocusedMessageId] = useState<string | null>(null);
   const [newMessageNotice, setNewMessageNotice] = useState(false);
   const [editValues, setEditValues] = useState({
     type: initialOrder.type,
@@ -193,6 +201,10 @@ export function OrderDetailClient({
   }, [lang, order.guestCount, t]);
   const orderTypeLabel =
     order.type === "CLEANING" ? t("serviceCleaningName") : order.type === "KEY_HANDLING" ? t("serviceKeyHandlingName") : order.type;
+  const closeFullscreenImage = useCallback(() => {
+    setFullscreenImageUrl(null);
+    setFullscreenZoom(1);
+  }, []);
 
   useEffect(() => {
     const valid = new Set(order.images.map((img) => img.id));
@@ -336,6 +348,24 @@ export function OrderDetailClient({
     };
   }, []);
 
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const hash = window.location.hash;
+    if (!hash.startsWith("#msg-")) return;
+    const messageId = hash.slice(5);
+    if (!messageId || !messages.some((msg) => msg.id === messageId)) return;
+
+    const focus = () => {
+      const target = document.getElementById(`msg-${messageId}`);
+      if (!target) return;
+      target.scrollIntoView({ behavior: "smooth", block: "center" });
+      setFocusedMessageId(messageId);
+      window.setTimeout(() => setFocusedMessageId((prev) => (prev === messageId ? null : prev)), 4000);
+    };
+
+    window.setTimeout(focus, 50);
+  }, [messages]);
+
   const updateStatus = async (status: string) => {
     const previous = order.status;
     setStatusSaving(true);
@@ -397,6 +427,19 @@ export function OrderDetailClient({
     }
     toast.success(t("statusOk"));
     await refresh();
+  };
+
+  const handleCompleteSubmit = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setPendingCompletionFormData(new FormData(event.currentTarget));
+    setCompleteConfirmOpen(true);
+  };
+
+  const confirmCompleteSubmit = async () => {
+    if (!pendingCompletionFormData) return;
+    setCompleteConfirmOpen(false);
+    await completeWithChecklist(pendingCompletionFormData);
+    setPendingCompletionFormData(null);
   };
 
   const submitReview = async (formData: FormData) => {
@@ -482,8 +525,14 @@ export function OrderDetailClient({
     event.preventDefault();
     const form = event.currentTarget;
     const original = new FormData(form);
-    const fileList = original.getAll("files").filter((item): item is File => item instanceof File);
-    if (fileList.length === 0) return;
+    const fileList = original
+      .getAll("files")
+      .filter((item): item is File => item instanceof File)
+      .filter((file) => file.size > 0 && file.name.trim().length > 0);
+    if (fileList.length === 0) {
+      toast.error("Please choose an image before uploading.");
+      return;
+    }
 
     setUploading(true);
     try {
@@ -674,7 +723,12 @@ export function OrderDetailClient({
       await showApiError(res);
       return;
     }
+    const payload = (await res.json().catch(() => null)) as { checkoutUrl?: string | null } | null;
     toast.success(t("paymentCreated"));
+    if (payload?.checkoutUrl) {
+      window.location.assign(payload.checkoutUrl);
+      return;
+    }
     void refreshPayment();
   };
 
@@ -704,6 +758,17 @@ export function OrderDetailClient({
     void refreshReceipt();
   };
 
+  const sendPaymentReminder = async () => {
+    setSendingPaymentReminder(true);
+    const res = await fetch(`/api/orders/${order.id}/payment/reminder`, { method: "POST" });
+    setSendingPaymentReminder(false);
+    if (!res.ok) {
+      await showApiError(res, "paymentReminderFailed");
+      return;
+    }
+    toast.success(t("paymentReminderSent"));
+  };
+
   const chatContent = (
     <>
       <div className="mb-3 flex items-center justify-between">
@@ -723,7 +788,17 @@ export function OrderDetailClient({
       >
         {messages.length === 0 && <p className="text-sm text-slate-500">{t("noMessagesYet")}</p>}
         {messages.map((msg) => (
-          <div key={msg.id} className={`rounded-md p-1.5 text-xs ${msg.senderId === currentUserId ? "bg-teal-50" : "bg-slate-100"}`}>
+          <div
+            key={msg.id}
+            id={`msg-${msg.id}`}
+            className={`rounded-md p-1.5 text-xs transition-colors ${
+              focusedMessageId === msg.id
+                ? "bg-amber-100 ring-1 ring-amber-300"
+                : msg.senderId === currentUserId
+                  ? "bg-teal-50"
+                  : "bg-slate-100"
+            }`}
+          >
             <div className="flex items-center justify-between gap-2">
               <p className="font-medium">{msg.sender.name}</p>
               {!isReadOnlyChat && msg.senderId === currentUserId && (
@@ -769,6 +844,18 @@ export function OrderDetailClient({
           {orderTypeLabel} | {order.address}
         </p>
         <p className="text-sm text-slate-600">{new Date(order.date).toLocaleString(locale, { hour12: false })}</p>
+        {order.deadlineAt ? (
+          <p className="text-sm text-slate-600">
+            <span className="font-semibold">{t("deadlineDateTimeLabel")}:</span>{" "}
+            {new Date(order.deadlineAt).toLocaleString(locale, { hour12: false })}
+          </p>
+        ) : null}
+        {order.status === "COMPLETED" ? (
+          <p className="text-sm text-slate-600">
+            <span className="font-semibold">{t("completedService")}:</span>{" "}
+            {new Date(order.updatedAt).toLocaleString(locale, { hour12: false })}
+          </p>
+        ) : null}
         <div className="mt-3 flex flex-wrap gap-3">
           <a
             href={mapUrl}
@@ -969,6 +1056,16 @@ export function OrderDetailClient({
                     <button className="btn btn-primary" type="button" onClick={() => void confirmPayment()} disabled={paymentBusy}>
                       {paymentBusy ? t("saving") : t("paymentConfirmAction")}
                     </button>
+                    {role === "ADMIN" ? (
+                      <button
+                        className="btn btn-secondary"
+                        type="button"
+                        onClick={() => void sendPaymentReminder()}
+                        disabled={sendingPaymentReminder}
+                      >
+                        {sendingPaymentReminder ? t("paymentReminderBusy") : t("paymentReminderAction")}
+                      </button>
+                    ) : null}
                   </>
                 ) : (
                   <button className="btn btn-secondary" type="button" onClick={() => void issueReceipt()} disabled={sendingReceipt}>
@@ -989,6 +1086,12 @@ export function OrderDetailClient({
                 </a>
               ) : null}
             </div>
+            {order.status === "COMPLETED" ? (
+              <p className="mb-1">
+                <span className="font-semibold">{t("completedDate")}:</span>{" "}
+                {new Date(order.updatedAt).toLocaleString(locale, { hour12: false })}
+              </p>
+            ) : null}
             <p className="font-semibold">{t("completionDetails")}</p>
             {order.completionNote || order.completionChecklist ? (
               <>
@@ -1043,27 +1146,6 @@ export function OrderDetailClient({
               </button>
             )}
           </div>
-        )}
-
-        {canWorkerComplete && (
-          <form action={completeWithChecklist} className="mt-4 rounded border border-slate-200 p-3">
-            <p className="text-sm font-semibold">{t("workerChecklist")}</p>
-            <div className="mt-2 grid gap-2 text-sm sm:grid-cols-2">
-              <label><input type="checkbox" name="bedReady" /> {formatChecklistLabel("bedReady")}</label>
-              <label><input type="checkbox" name="bathroomClean" /> {t("bathroomClean")}</label>
-              <label><input type="checkbox" name="kitchenClean" /> {t("kitchenClean")}</label>
-              <label><input type="checkbox" name="floorsVacuumed" /> {t("floorsVacuumed")}</label>
-              <label><input type="checkbox" name="trashHandled" /> {t("trashHandled")}</label>
-              <label><input type="checkbox" name="keysHandled" /> {t("keysHandled")}</label>
-              <label><input type="checkbox" name="towelsPrepared" /> {formatChecklistLabel("towelsPrepared")}</label>
-              <label><input type="checkbox" name="suppliesRefilled" /> {t("suppliesRefilled")}</label>
-              <label><input type="checkbox" name="allRoomsPhotographed" /> {t("allRoomsPhotographed")}</label>
-            </div>
-            <textarea className="input mt-3" name="completionNote" placeholder={t("completionNote")} />
-            <button className="btn btn-primary mt-3" disabled={completing} type="submit">
-              {completing ? t("sending") : t("completeWithNote")}
-            </button>
-          </form>
         )}
 
         {role === "ADMIN" && (
@@ -1141,8 +1223,32 @@ export function OrderDetailClient({
       {canWorkerUpload && (
         <form onSubmit={(event) => void handleUploadSubmit(event)} className="panel flex flex-wrap items-end gap-2 p-4 sm:p-5">
           <div>
-            <label className="mb-1 block text-sm">{t("uploadImage")}</label>
-            <input type="file" className="input" name="files" accept="image/*" multiple required />
+            <p className="mb-1 block text-sm">{t("uploadImage")}</p>
+            <div className="flex flex-wrap gap-2">
+              <label
+                htmlFor="camera-upload-input"
+                className="inline-flex cursor-pointer items-center gap-2 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+                title={t("uploadFromCamera")}
+              >
+                <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+                  <path d="M4 7h3l2-2h6l2 2h3v12H4z" />
+                  <circle cx="12" cy="13" r="4" />
+                </svg>
+                <span>{t("uploadFromCamera")}</span>
+              </label>
+              <label
+                htmlFor="attachment-upload-input"
+                className="inline-flex cursor-pointer items-center gap-2 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+                title={t("uploadFromLibrary")}
+              >
+                <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+                  <path d="M21.44 11.05 12.25 20.24a6 6 0 0 1-8.49-8.49l9.2-9.19a4 4 0 0 1 5.65 5.65l-9.2 9.19a2 2 0 0 1-2.82-2.82l8.49-8.48" />
+                </svg>
+                <span>{t("uploadFromLibrary")}</span>
+              </label>
+            </div>
+            <input id="camera-upload-input" type="file" className="hidden" name="files" accept="image/*" capture="environment" />
+            <input id="attachment-upload-input" type="file" className="hidden" name="files" accept="image/*" multiple />
           </div>
           <div>
             <label className="mb-1 block text-sm">{t("uploadType")}</label>
@@ -1193,6 +1299,15 @@ export function OrderDetailClient({
                   setLoadedImageIds((prev) => (prev[image.id] ? prev : { ...prev, [image.id]: true }));
                 }}
               />
+              <button
+                type="button"
+                className="absolute inset-0 z-10 cursor-zoom-in"
+                aria-label="Open image fullscreen"
+                onClick={() => {
+                  setFullscreenImageUrl(image.url);
+                  setFullscreenZoom(1);
+                }}
+              />
             </div>
             <p className="mt-2 text-xs uppercase text-slate-500">{image.kind ?? t("uploadImage").toLowerCase()}</p>
             <p className="text-sm">{image.caption}</p>
@@ -1227,6 +1342,97 @@ export function OrderDetailClient({
           </button>
         </div>
       )}
+
+      {canWorkerComplete && (
+        <form onSubmit={handleCompleteSubmit} className="panel mt-4 rounded border border-slate-200 p-3">
+          <p className="text-sm font-semibold">{t("workerChecklist")}</p>
+          <div className="mt-2 grid gap-2 text-sm sm:grid-cols-2">
+            <label><input type="checkbox" name="bedReady" /> {formatChecklistLabel("bedReady")}</label>
+            <label><input type="checkbox" name="bathroomClean" /> {t("bathroomClean")}</label>
+            <label><input type="checkbox" name="kitchenClean" /> {t("kitchenClean")}</label>
+            <label><input type="checkbox" name="floorsVacuumed" /> {t("floorsVacuumed")}</label>
+            <label><input type="checkbox" name="trashHandled" /> {t("trashHandled")}</label>
+            <label><input type="checkbox" name="keysHandled" /> {t("keysHandled")}</label>
+            <label><input type="checkbox" name="towelsPrepared" /> {formatChecklistLabel("towelsPrepared")}</label>
+            <label><input type="checkbox" name="suppliesRefilled" /> {t("suppliesRefilled")}</label>
+            <label><input type="checkbox" name="allRoomsPhotographed" /> {t("allRoomsPhotographed")}</label>
+          </div>
+          <textarea className="input mt-3" name="completionNote" placeholder={t("completionNote")} />
+          <button className="btn btn-primary mt-3" disabled={completing} type="submit">
+            {completing ? t("sending") : t("completeWithNote")}
+          </button>
+        </form>
+      )}
+
+      {completeConfirmOpen ? (
+        <div className="fixed inset-0 z-[80] bg-slate-900/45 p-4">
+          <div className="mx-auto mt-20 w-full max-w-md rounded-2xl bg-white p-5 shadow-xl">
+            <h3 className="text-lg font-bold text-slate-900">{t("completeConfirmTitle")}</h3>
+            <p className="mt-2 text-sm text-slate-600">{t("completeConfirmMessage")}</p>
+            <div className="mt-5 flex justify-end gap-2">
+              <button
+                type="button"
+                className="btn btn-secondary"
+                onClick={() => {
+                  setCompleteConfirmOpen(false);
+                  setPendingCompletionFormData(null);
+                }}
+              >
+                {t("cancel")}
+              </button>
+              <button type="button" className="btn btn-primary" onClick={() => void confirmCompleteSubmit()} disabled={completing}>
+                {completing ? t("sending") : t("completeWithNote")}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {fullscreenImageUrl ? (
+        <div className="fixed inset-0 z-[90] bg-black/90 p-3 sm:p-6" onClick={closeFullscreenImage}>
+          <div className="mx-auto flex h-full w-full max-w-6xl flex-col" onClick={(event) => event.stopPropagation()}>
+            <div className="mb-3 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  className="rounded-md bg-white px-3 py-1 text-sm font-semibold text-slate-900"
+                  onClick={() => setFullscreenZoom((prev) => Math.max(1, Number((prev - 0.25).toFixed(2))))}
+                >
+                  -
+                </button>
+                <button
+                  type="button"
+                  className="rounded-md bg-white px-3 py-1 text-sm font-semibold text-slate-900"
+                  onClick={() => setFullscreenZoom(1)}
+                >
+                  100%
+                </button>
+                <button
+                  type="button"
+                  className="rounded-md bg-white px-3 py-1 text-sm font-semibold text-slate-900"
+                  onClick={() => setFullscreenZoom((prev) => Math.min(4, Number((prev + 0.25).toFixed(2))))}
+                >
+                  +
+                </button>
+              </div>
+              <button type="button" className="rounded-md bg-white px-3 py-1 text-sm font-semibold text-slate-900" onClick={closeFullscreenImage}>
+                {t("cancel")}
+              </button>
+            </div>
+            <div className="flex-1 overflow-auto rounded-lg border border-white/20 bg-black">
+              <div className="flex min-h-full min-w-full items-center justify-center p-2">
+                <div style={{ transform: `scale(${fullscreenZoom})`, transformOrigin: "center center" }}>
+                  <img
+                    src={fullscreenImageUrl}
+                    alt="Order image fullscreen"
+                    className="max-h-[82vh] max-w-full select-none object-contain"
+                  />
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : null}
 
     </div>
   );

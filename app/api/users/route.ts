@@ -44,8 +44,21 @@ export async function POST(req: Request) {
     const body = await req.json();
     const data = userCreateSchema.parse(body);
     const password = await bcrypt.hash(data.password, 10);
+    const canLandlord = data.canLandlord ?? (data.role === "ADMIN" || data.role === "UTLEIER");
+    const canService = data.canService ?? (data.role === "ADMIN" || data.role === "TJENESTE");
+    const activeMode = data.activeMode ?? (canService && !canLandlord ? "TJENESTE" : "UTLEIER");
     const user = await prisma.user.create({
-      data: { ...data, password },
+      data: {
+        name: data.name,
+        email: data.email,
+        phone: data.phone,
+        role: data.role,
+        password,
+        canLandlord,
+        canService,
+        activeMode,
+        isActive: data.isActive ?? true,
+      },
       select: {
         id: true,
         name: true,

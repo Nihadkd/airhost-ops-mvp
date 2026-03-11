@@ -15,7 +15,17 @@ export async function GET(_: Request, { params }: { params: Promise<{ id: string
 
     const user = await prisma.user.findUnique({
       where: { id },
-      select: { id: true, name: true, email: true, role: true, isActive: true, createdAt: true },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        role: true,
+        isActive: true,
+        canLandlord: true,
+        canService: true,
+        activeMode: true,
+        createdAt: true,
+      },
     });
 
     if (!user) return apiError(404, "User not found");
@@ -43,7 +53,17 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
       const updated = await prisma.user.update({
         where: { id },
         data: ownUpdate,
-        select: { id: true, name: true, email: true, role: true, isActive: true, createdAt: true },
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          role: true,
+          isActive: true,
+          canLandlord: true,
+          canService: true,
+          activeMode: true,
+          createdAt: true,
+        },
       });
       return NextResponse.json(updated);
     }
@@ -51,7 +71,17 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
     const updated = await prisma.user.update({
       where: { id },
       data: parsed.data,
-      select: { id: true, name: true, email: true, role: true, isActive: true, createdAt: true },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        role: true,
+        isActive: true,
+        canLandlord: true,
+        canService: true,
+        activeMode: true,
+        createdAt: true,
+      },
     });
 
     return NextResponse.json(updated);

@@ -6,6 +6,7 @@ vi.mock("@/lib/prisma", () => ({
   prisma: {
     serviceOrder: { findUnique: vi.fn(), update: vi.fn() },
     receipt: { upsert: vi.fn(), update: vi.fn() },
+    notification: { create: vi.fn() },
   },
 }));
 
@@ -82,7 +83,7 @@ describe("/api/orders/[id]/payment", () => {
     vi.mocked(prisma.serviceOrder.findUnique).mockResolvedValue({
       id: "o1",
       landlordId: "u1",
-      assignedToId: null,
+      assignedToId: "w1",
       orderNumber: 44,
       type: "CLEANING",
       address: "Addr",
@@ -90,6 +91,7 @@ describe("/api/orders/[id]/payment", () => {
       paymentIntent: "pi_o1_850",
       receipt: null,
       landlord: { id: "u1", name: "Landlord", email: "l@example.com" },
+      assignedTo: { id: "w1", name: "Worker", email: "w@example.com" },
     } as never);
     vi.mocked(prisma.receipt.upsert).mockResolvedValue({
       id: "r1",
@@ -118,5 +120,13 @@ describe("/api/orders/[id]/payment", () => {
     expect(res.status).toBe(200);
     expect(vi.mocked(prisma.receipt.upsert)).toHaveBeenCalled();
     expect(vi.mocked(sendMail)).toHaveBeenCalled();
+    expect(vi.mocked(prisma.notification.create)).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          userId: "w1",
+          targetUrl: "/orders/o1",
+        }),
+      }),
+    );
   });
 });

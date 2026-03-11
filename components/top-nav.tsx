@@ -31,6 +31,7 @@ export function TopNav({ initialMe }: { initialMe: Me }) {
       { href: "/profile", label: `${t("profile")} (${me.name})`, show: true },
       { href: "/settings", label: t("settings"), show: true },
       { href: "/admin/users", label: t("users"), show: hasAdminAccess || me.effectiveRole === "ADMIN" },
+      { href: "/admin/lab", label: t("adminLab"), show: hasAdminAccess || me.effectiveRole === "ADMIN" },
     ],
     [hasAdminAccess, me.effectiveRole, me.name, t],
   );
@@ -90,17 +91,16 @@ export function TopNav({ initialMe }: { initialMe: Me }) {
           aria-label={t("home")}
           title={t("home")}
         >
-          <span className="inline-flex h-11 w-11 items-center justify-center rounded-xl bg-teal-700 text-white shadow-sm">
-            <svg width="22" height="22" viewBox="0 0 24 24" aria-hidden="true">
-              <path
-                d="M4 11.8 12 5l8 6.8V20a1 1 0 0 1-1 1h-5v-6h-4v6H5a1 1 0 0 1-1-1z"
-                fill="currentColor"
-              />
-            </svg>
+          <span className="inline-flex h-11 min-w-11 items-center justify-center rounded-xl border border-emerald-200 bg-white px-3 shadow-sm">
+            <span className="text-base font-black tracking-[0.18em]">
+              <span className="text-emerald-600">S</span>
+              <span className="text-slate-950">V</span>
+            </span>
           </span>
           <div className="leading-tight">
-            <p className="text-base font-black tracking-[0.12em] text-slate-800">
-              <span className="text-teal-700">Se</span>rv<span className="text-teal-700">N</span>est
+            <p className="text-base font-black tracking-[0.16em] text-slate-950">
+              <span className="text-emerald-600">S</span>
+              <span className="text-slate-950">V</span>
             </p>
           </div>
         </Link>

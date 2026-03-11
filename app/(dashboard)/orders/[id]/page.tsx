@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { getStartAvailabilityForWorker } from "@/lib/services/order-start-service";
 import { resolveUserRole } from "@/lib/user-role";
 import { OrderDetailClient } from "@/components/order-detail-client";
+import { splitOrderNote } from "@/lib/order-deadline";
 
 export default async function OrderDetailsPage({ params }: { params: Promise<{ id: string }> }) {
   const session = await auth();
@@ -58,8 +59,11 @@ export default async function OrderDetailsPage({ params }: { params: Promise<{ i
     return { ...user, averageRating, reviewCount };
   };
 
+  const parsedOrderNote = splitOrderNote(order.note);
   const orderWithRating = {
     ...order,
+    note: parsedOrderNote.note,
+    deadlineAt: parsedOrderNote.deadlineAt,
     assignedTo: order.assignedTo ? withRating(order.assignedTo) : null,
   };
   const startAvailability =

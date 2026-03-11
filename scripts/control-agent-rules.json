@@ -1,0 +1,19 @@
+{
+  "forbidden": [
+    {
+      "find": "Serven3st@gmail.com",
+      "replace": "Servn3st@gmail.com",
+      "reason": "Correct business email spelling."
+    }
+  ],
+  "requiredLiterals": [
+    {
+      "value": "Servn3st@gmail.com",
+      "reason": "Business contact email must stay present in legal/receipt content."
+    },
+    {
+      "value": "937249721",
+      "reason": "Business org number must remain consistent."
+    }
+  ]
+}

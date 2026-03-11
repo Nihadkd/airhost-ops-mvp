@@ -32,6 +32,7 @@ import { PUT as assignOrder } from "@/app/api/orders/[id]/assign/route";
 import { sendAssignedOrderSms } from "@/lib/sms";
 
 const validHalfHourIso = "2026-03-01T10:30:00.000Z";
+const validDeadlineHalfHourIso = "2026-03-01T12:30:00.000Z";
 
 describe("/api/orders", () => {
   beforeEach(() => {
@@ -53,7 +54,7 @@ describe("/api/orders", () => {
 
     const req = new Request("http://localhost/api/orders", {
       method: "POST",
-      body: JSON.stringify({ type: "CLEANING", address: "Street 1", date: validHalfHourIso, guestCount: 2 }),
+      body: JSON.stringify({ type: "CLEANING", address: "Street 1", date: validHalfHourIso, deadlineAt: validDeadlineHalfHourIso, guestCount: 2 }),
       headers: { "Content-Type": "application/json" },
     });
 
@@ -70,6 +71,26 @@ describe("/api/orders", () => {
         type: "CLEANING",
         address: "Street 1",
         date: "2026-03-01T10:15:00.000Z",
+        deadlineAt: validDeadlineHalfHourIso,
+        guestCount: 2,
+      }),
+      headers: { "Content-Type": "application/json" },
+    });
+
+    const res = await createOrder(req);
+    expect(res.status).toBe(400);
+  });
+
+  it("POST rejects deadline that is before start time", async () => {
+    vi.mocked(requireAuth).mockResolvedValue({ user: { id: "l1", role: "UTLEIER" } } as never);
+
+    const req = new Request("http://localhost/api/orders", {
+      method: "POST",
+      body: JSON.stringify({
+        type: "CLEANING",
+        address: "Street 1",
+        date: validHalfHourIso,
+        deadlineAt: "2026-03-01T10:00:00.000Z",
         guestCount: 2,
       }),
       headers: { "Content-Type": "application/json" },
@@ -86,9 +107,10 @@ describe("/api/orders", () => {
       isActive: true,
       canLandlord: true,
       name: "Landlord 1",
+      email: "l1@example.com",
     } as never);
     vi.mocked(prisma.serviceOrder.findFirst).mockResolvedValue(null as never);
-    vi.mocked(prisma.serviceOrder.create).mockResolvedValue({ id: "o2", address: "Street 9" } as never);
+    vi.mocked(prisma.serviceOrder.create).mockResolvedValue({ id: "o2", address: "Street 9", orderNumber: 25 } as never);
 
     const req = new Request("http://localhost/api/orders", {
       method: "POST",
@@ -96,6 +118,7 @@ describe("/api/orders", () => {
         type: "CLEANING",
         address: "Street 9",
         date: validHalfHourIso,
+        deadlineAt: validDeadlineHalfHourIso,
         guestCount: 2,
         landlordId: "l1",
       }),
@@ -205,6 +228,7 @@ describe("/api/orders", () => {
       orderNumber: 42,
       status: "IN_PROGRESS",
     } as never);
+    vi.mocked(prisma.user.findUnique).mockResolvedValue({ id: "l1", name: "Landlord", email: "l@example.com" } as never);
     vi.mocked(prisma.serviceOrder.update).mockResolvedValue({ id: "o1", status: "COMPLETED" } as never);
 
     const req = new Request("http://localhost", {
@@ -220,7 +244,7 @@ describe("/api/orders", () => {
         data: expect.objectContaining({
           userId: "l1",
           actorUserId: "t1",
-          message: expect.stringContaining("Vennligst gå gjennom oppdraget"),
+          message: expect.stringContaining("klart for betaling"),
         }),
       }),
     );
@@ -435,6 +459,8 @@ describe("/api/orders", () => {
   it("PUT /api/orders/[id]/assign sends sms to worker", async () => {
     vi.mocked(prisma.user.findUnique).mockResolvedValue({
       id: "t1",
+      name: "Worker 1",
+      email: "worker@example.com",
       role: "TJENESTE",
       phone: "+4790000000",
       isActive: true,

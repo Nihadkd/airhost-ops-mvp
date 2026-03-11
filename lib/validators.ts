@@ -7,6 +7,7 @@ export const registerSchema = z.object({
   phone: z.string().min(6).max(30),
   password: z.string().min(8),
   role: z.enum(["UTLEIER", "TJENESTE", "BEGGE"]).optional(),
+  acceptedTerms: z.literal(true),
 });
 
 export const userCreateSchema = z.object({
@@ -15,6 +16,10 @@ export const userCreateSchema = z.object({
   phone: z.string().min(6).max(30),
   password: z.string().min(8),
   role: z.nativeEnum(Role),
+  canLandlord: z.boolean().optional(),
+  canService: z.boolean().optional(),
+  activeMode: z.enum(["UTLEIER", "TJENESTE"]).optional(),
+  isActive: z.boolean().optional(),
 });
 
 export const userUpdateSchema = z.object({
@@ -22,6 +27,9 @@ export const userUpdateSchema = z.object({
   phone: z.string().min(6).max(30).optional(),
   mobileNotifications: z.boolean().optional(),
   role: z.nativeEnum(Role).optional(),
+  canLandlord: z.boolean().optional(),
+  canService: z.boolean().optional(),
+  activeMode: z.enum(["UTLEIER", "TJENESTE"]).optional(),
   isActive: z.boolean().optional(),
 });
 
@@ -38,6 +46,7 @@ export const orderCreateSchema = z.object({
   type: z.nativeEnum(ServiceType),
   address: z.string().min(3),
   date: z.string().datetime(),
+  deadlineAt: z.string().datetime(),
   note: z.string().max(500).optional(),
   guestCount: z.number().int().min(1).max(50).optional(),
   landlordId: z.string().min(1).optional(),
@@ -117,4 +126,13 @@ export const pushTokenSchema = z.object({
 export const resetPasswordSchema = z.object({
   email: z.string().email(),
   password: z.string().min(8),
+});
+
+export const paymentWebhookSchema = z.object({
+  provider: z.enum(["stub", "vipps", "stripe"]),
+  eventType: z.enum(["payment_authorized", "payment_captured", "payment_failed"]),
+  orderId: z.string().min(1).optional(),
+  paymentIntentId: z.string().min(1).optional(),
+  amountNok: z.number().int().min(1).optional(),
+  status: z.enum(["pending", "paid", "failed"]),
 });

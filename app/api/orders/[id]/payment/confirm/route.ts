@@ -4,12 +4,15 @@ import { requireAuth } from "@/lib/rbac";
 import { apiError, handleApiError } from "@/lib/api";
 import { issueOrderReceipt } from "@/lib/receipt-service";
 import { estimatePaymentAmountNok, parseStubPaymentIntentAmount } from "@/lib/payments/order-payment";
+import { sendPaymentConfirmedEmail } from "@/lib/email-notifications";
+import { notifyUserEvent } from "@/lib/user-event-notifications";
 
 async function canAccessOrder(orderId: string, userId: string, role: string, accountRole: string) {
   const order = await prisma.serviceOrder.findUnique({
     where: { id: orderId },
     include: {
       landlord: { select: { id: true, name: true, email: true } },
+      assignedTo: { select: { id: true, name: true, email: true } },
       receipt: true,
     },
   });
@@ -55,6 +58,26 @@ export async function POST(req: Request, { params }: RouteContext) {
         paymentIntent: access.order.paymentIntent ?? `pi_${id}_${amountNok}`,
       },
     });
+
+    if (access.order.assignedTo?.id) {
+      const assignee = access.order.assignedTo;
+      await notifyUserEvent({
+        recipient: {
+          userId: assignee.id,
+          email: assignee.email,
+          name: assignee.name,
+        },
+        actorUserId: session.user.id,
+        message: `Betaling for oppdrag #${access.order.orderNumber} er registrert.`,
+        targetUrl: `/orders/${id}`,
+        email: () =>
+          sendPaymentConfirmedEmail({
+            to: { email: assignee.email, name: assignee.name },
+            orderId: id,
+            orderNumber: access.order.orderNumber,
+          }),
+      });
+    }
 
     return NextResponse.json({
       status: "paid",

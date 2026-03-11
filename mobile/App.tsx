@@ -46,6 +46,7 @@ export default function App() {
   const [tokenSynced, setTokenSynced] = useState(false);
   const [syncAttempt, setSyncAttempt] = useState(0);
   const [syncError, setSyncError] = useState<string | null>(null);
+  const [lastPushToken, setLastPushToken] = useState<string | null>(null);
   const [permissionState, setPermissionState] = useState<Notifications.PermissionStatus>(
     Notifications.PermissionStatus.UNDETERMINED,
   );
@@ -212,6 +213,7 @@ export default function App() {
 
     const token = (await Notifications.getExpoPushTokenAsync({ projectId })).data;
     expoPushTokenRef.current = token;
+    setLastPushToken(token);
     return token;
   }, []);
 
@@ -219,7 +221,10 @@ export default function App() {
     if (!Device.isDevice) return;
     const permission = await Notifications.getPermissionsAsync();
     setPermissionState(permission.status);
-    if (permission.status === "granted") return;
+    if (permission.status === "granted") {
+      setSyncAttempt((value) => value + 1);
+      return;
+    }
 
     const asked = await Notifications.requestPermissionsAsync();
     setPermissionState(asked.status);
@@ -276,6 +281,25 @@ export default function App() {
     },
     [],
   );
+
+  const syncPushTokenNow = useCallback(async () => {
+    setSyncError(null);
+    setSyncAttempt((value) => value + 1);
+    if (!pushReady) {
+      setSyncError("web_session_not_ready");
+      return;
+    }
+    try {
+      const token = await requestExpoPushToken();
+      if (!token) {
+        setSyncError("no_push_token");
+        return;
+      }
+      await syncPushTokenInWebContext(token);
+    } catch (error) {
+      setSyncError(error instanceof Error ? error.message : "push_sync_failed");
+    }
+  }, [pushReady, requestExpoPushToken, syncPushTokenInWebContext]);
 
   useEffect(() => {
     if (Platform.OS !== "android") return;
@@ -409,9 +433,15 @@ export default function App() {
     let cancelled = false;
 
     const run = async () => {
-      const token = await requestExpoPushToken();
-      if (!token || cancelled) return;
-      await syncPushTokenInWebContext(token);
+      try {
+        const token = await requestExpoPushToken();
+        if (!token || cancelled) return;
+        await syncPushTokenInWebContext(token);
+      } catch (error) {
+        if (!cancelled) {
+          setSyncError(error instanceof Error ? error.message : "push_sync_failed");
+        }
+      }
     };
 
     void run();
@@ -419,6 +449,14 @@ export default function App() {
       cancelled = true;
     };
   }, [openApp, pushReady, tokenSynced, syncAttempt, requestExpoPushToken, syncPushTokenInWebContext]);
+
+  useEffect(() => {
+    if (!openApp || !pushReady || tokenSynced) return;
+    const timer = setInterval(() => {
+      setSyncAttempt((value) => value + 1);
+    }, 15000);
+    return () => clearInterval(timer);
+  }, [openApp, pushReady, tokenSynced]);
 
   const onWebMessage = useCallback((event: WebViewMessageEvent) => {
     try {
@@ -636,6 +674,15 @@ export default function App() {
       >
         <Text style={styles.infoButtonText}>Push status</Text>
       </Pressable>
+
+      <Pressable onPress={() => void syncPushTokenNow()} style={styles.infoButton}>
+        <Text style={styles.infoButtonText}>{tokenSynced ? "Push synced" : "Sync push now"}</Text>
+      </Pressable>
+
+      <Text style={styles.debugText}>
+        Permission: {permissionState} | Token: {lastPushToken ? "ok" : "missing"} | Web auth: {pushReady ? "ok" : "waiting"}
+      </Text>
+      {syncError ? <Text style={styles.debugError}>Last push error: {syncError}</Text> : null}
     </SafeAreaView>
   );
 }
@@ -720,6 +767,20 @@ const styles = StyleSheet.create({
     color: "#0b8f7b",
     textDecorationLine: "underline",
     fontWeight: "600",
+  },
+  debugText: {
+    marginTop: 8,
+    color: "#46616f",
+    fontSize: 12,
+    textAlign: "center",
+    paddingHorizontal: 20,
+  },
+  debugError: {
+    marginTop: 4,
+    color: "#b42318",
+    fontSize: 12,
+    textAlign: "center",
+    paddingHorizontal: 20,
   },
   webRoot: {
     flex: 1,

@@ -11,6 +11,13 @@ const codeToKey: Record<string, string> = {
   DB_UNAVAILABLE: "registerReasonDbUnavailable",
   USER_NOT_FOUND: "userNotFound",
   REGISTER_FAILED: "registerReasonUnknown",
+  INVALID_TOKEN: "verificationFailed",
+  REGISTER_VERIFY_FAILED: "verificationFailed",
+  RESET_REQUEST_FAILED: "resetPasswordFailed",
+  MAIL_NOT_CONFIGURED: "serviceUnavailableError",
+  MAIL_SEND_FAILED: "serviceUnavailableError",
+  PAYMENT_REMINDER_FORBIDDEN: "forbiddenError",
+  PAYMENT_ALREADY_COMPLETED: "paymentStatusPaid",
   ORDER_NOT_STARTED: "orderStartRequired",
   WORKER_SEQUENCE_BLOCKED: "workerSequenceBlocked",
 };
@@ -31,7 +38,6 @@ const errorToKey: Record<string, string> = {
 };
 
 const statusToKey: Record<number, string> = {
-  400: "registerReasonInvalidPayload",
   401: "unauthorizedError",
   403: "forbiddenError",
   404: "notFoundError",
@@ -48,7 +54,7 @@ export async function toUserErrorMessage(
 
   if (payload?.code && codeToKey[payload.code]) return t(codeToKey[payload.code]);
   if (payload?.error && errorToKey[payload.error]) return t(errorToKey[payload.error]);
-  if (statusToKey[response.status]) return t(statusToKey[response.status]);
   if (payload?.error) return payload.error;
+  if (statusToKey[response.status]) return t(statusToKey[response.status]);
   return t(fallbackKey);
 }

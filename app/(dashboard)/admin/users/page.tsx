@@ -25,30 +25,60 @@ export default async function AdminUsersPage() {
     );
   }
 
-  const users = await prisma.user.findMany({
-    orderBy: { createdAt: "desc" },
-    select: {
-      id: true,
-      name: true,
-      email: true,
-      phone: true,
-      role: true,
-      isActive: true,
-      canLandlord: true,
-      canService: true,
-      activeMode: true,
-      createdAt: true,
-      _count: {
-        select: {
-          landlordOrders: true,
-          assignedOrders: true,
-          reviewsWritten: true,
-          reviewsReceived: true,
-          pushTokens: true,
+  let users: Array<{
+    id: string;
+    name: string;
+    email: string;
+    phone: string | null;
+    role: "ADMIN" | "UTLEIER" | "TJENESTE";
+    isActive: boolean;
+    canLandlord: boolean;
+    canService: boolean;
+    activeMode: "UTLEIER" | "TJENESTE";
+    createdAt: Date;
+    _count: {
+      landlordOrders: number;
+      assignedOrders: number;
+      reviewsWritten: number;
+      reviewsReceived: number;
+      pushTokens: number;
+    };
+  }> = [];
+
+  try {
+    users = await prisma.user.findMany({
+      orderBy: { createdAt: "desc" },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        phone: true,
+        role: true,
+        isActive: true,
+        canLandlord: true,
+        canService: true,
+        activeMode: true,
+        createdAt: true,
+        _count: {
+          select: {
+            landlordOrders: true,
+            assignedOrders: true,
+            reviewsWritten: true,
+            reviewsReceived: true,
+            pushTokens: true,
+          },
         },
       },
-    },
-  });
+    });
+  } catch (error) {
+    console.error("[admin/users] load_failed", error);
+    return (
+      <section className="panel p-5">
+        <h1 className="text-2xl font-bold">{t("fullUserOverviewTitle")}</h1>
+        <p className="mt-2 text-sm text-red-600">Kunne ikke laste brukerliste akkurat na. Prov igjen om et oyeblikk.</p>
+      </section>
+    );
+  }
 
   return (
     <section>

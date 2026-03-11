@@ -18,6 +18,7 @@ export async function GET(req: Request) {
     const page = Number.isFinite(pageRaw) && pageRaw > 0 ? Math.floor(pageRaw) : 1;
     const pageSize = Number.isFinite(pageSizeRaw) ? Math.min(50, Math.max(10, Math.floor(pageSizeRaw))) : 20;
     const search = url.searchParams.get("search")?.trim();
+    const dateParam = url.searchParams.get("date")?.trim();
     const sortParam = url.searchParams.get("sort");
     const viewParam = url.searchParams.get("view");
     const statusParam = url.searchParams.get("status");
@@ -80,13 +81,34 @@ export async function GET(req: Request) {
       : null;
 
     const where = searchWhere ? { AND: [visibilityWhere, searchWhere] } : visibilityWhere;
-    const orderBy =
-      sort === "OLDEST_NEWEST" ? { createdAt: "asc" as const } : sort === "NEAREST" ? { date: "asc" as const } : { createdAt: "desc" as const };
+    const dateWhere =
+      dateParam && /^\d{4}-\d{2}-\d{2}$/.test(dateParam)
+        ? {
+            date: {
+              gte: new Date(`${dateParam}T00:00:00.000Z`),
+              lt: new Date(`${dateParam}T23:59:59.999Z`),
+            },
+          }
+        : null;
+    const whereWithDate = dateWhere
+      ? searchWhere
+        ? { AND: [visibilityWhere, searchWhere, dateWhere] }
+        : { AND: [visibilityWhere, dateWhere] }
+      : where;
+    const forceWorkerMyOrdersByDate =
+      !isAdmin && session.user.role === "TJENESTE" && view === "my";
+    const orderBy = forceWorkerMyOrdersByDate
+      ? [{ date: "asc" as const }, { createdAt: "asc" as const }]
+      : sort === "OLDEST_NEWEST"
+        ? { createdAt: "asc" as const }
+        : sort === "NEAREST"
+          ? { date: "asc" as const }
+          : { createdAt: "desc" as const };
 
-    const totalPromise = prisma.serviceOrder.count({ where });
+    const totalPromise = prisma.serviceOrder.count({ where: whereWithDate });
 
     const ordersPromise = prisma.serviceOrder.findMany({
-      where,
+      where: whereWithDate,
       include: {
         landlord: { select: { id: true, name: true } },
         assignedTo: { select: { id: true, name: true } },
@@ -140,6 +162,7 @@ export async function GET(req: Request) {
       stats,
       filters: {
         search: search ?? "",
+        date: dateParam ?? "",
         sort,
         view,
         status: myStatus,
