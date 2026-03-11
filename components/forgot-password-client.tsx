@@ -9,11 +9,13 @@ export function ForgotPasswordClient({ token }: { token: string }) {
   const { lang, setLang, t } = useLanguage();
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
+  const [debugResetUrl, setDebugResetUrl] = useState("");
   const [loading, setLoading] = useState(false);
 
   const sendResetEmail = async (formData: FormData) => {
     setError("");
     setSuccess("");
+    setDebugResetUrl("");
     setLoading(true);
     try {
       const email = String(formData.get("email") ?? "").trim().toLowerCase();
@@ -27,7 +29,9 @@ export function ForgotPasswordClient({ token }: { token: string }) {
         setLoading(false);
         return;
       }
+      const data = (await res.json().catch(() => null)) as { debugResetUrl?: string | null } | null;
       setSuccess(t("resetPasswordEmailSent"));
+      if (data?.debugResetUrl) setDebugResetUrl(data.debugResetUrl);
     } catch {
       setError(t("resetPasswordFailed"));
     } finally {
@@ -84,6 +88,13 @@ export function ForgotPasswordClient({ token }: { token: string }) {
           />
           {error && <p className="text-sm text-red-600">{error}</p>}
           {success && <p className="text-sm text-teal-700">{success}</p>}
+          {debugResetUrl ? (
+            <p className="text-sm text-slate-600">
+              <a href={debugResetUrl} className="text-teal-700 underline">
+                {t("resetPasswordDebugLink")}
+              </a>
+            </p>
+          ) : null}
           <button className="btn btn-primary w-full" type="submit" disabled={loading}>
             {loading ? "..." : t("send")}
           </button>

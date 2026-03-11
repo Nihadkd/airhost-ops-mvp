@@ -27,7 +27,14 @@ describe("/api/orders/[id]/messages", () => {
 
   it("allows landlord to read own order chat", async () => {
     vi.mocked(requireAuth).mockResolvedValue({ user: { id: "l1", role: "UTLEIER" } } as never);
-    vi.mocked(prisma.serviceOrder.findUnique).mockResolvedValue({ id: "o1", landlordId: "l1", assignedToId: "t1", status: "IN_PROGRESS", orderNumber: 10 } as never);
+    vi.mocked(prisma.serviceOrder.findUnique).mockResolvedValue({
+      id: "o1",
+      landlordId: "l1",
+      assignedToId: "t1",
+      assignmentStatus: "CONFIRMED",
+      status: "IN_PROGRESS",
+      orderNumber: 10,
+    } as never);
     vi.mocked(prisma.message.findMany).mockResolvedValue([] as never);
 
     const res = await GET(new Request("http://localhost"), { params: Promise.resolve({ id: "o1" }) });
@@ -36,7 +43,14 @@ describe("/api/orders/[id]/messages", () => {
 
   it("creates chat message to counterpart", async () => {
     vi.mocked(requireAuth).mockResolvedValue({ user: { id: "l1", role: "UTLEIER" } } as never);
-    vi.mocked(prisma.serviceOrder.findUnique).mockResolvedValue({ id: "o1", landlordId: "l1", assignedToId: "t1", status: "IN_PROGRESS", orderNumber: 10 } as never);
+    vi.mocked(prisma.serviceOrder.findUnique).mockResolvedValue({
+      id: "o1",
+      landlordId: "l1",
+      assignedToId: "t1",
+      assignmentStatus: "CONFIRMED",
+      status: "IN_PROGRESS",
+      orderNumber: 10,
+    } as never);
     vi.mocked(prisma.message.create).mockResolvedValue({
       id: "m1",
       text: "Hei",
@@ -75,7 +89,14 @@ describe("/api/orders/[id]/messages", () => {
 
   it("deletes own chat message", async () => {
     vi.mocked(requireAuth).mockResolvedValue({ user: { id: "l1", role: "UTLEIER" } } as never);
-    vi.mocked(prisma.serviceOrder.findUnique).mockResolvedValue({ id: "o1", landlordId: "l1", assignedToId: "t1", status: "IN_PROGRESS", orderNumber: 10 } as never);
+    vi.mocked(prisma.serviceOrder.findUnique).mockResolvedValue({
+      id: "o1",
+      landlordId: "l1",
+      assignedToId: "t1",
+      assignmentStatus: "CONFIRMED",
+      status: "IN_PROGRESS",
+      orderNumber: 10,
+    } as never);
     vi.mocked(prisma.message.findUnique).mockResolvedValue({ id: "m1", orderId: "o1", senderId: "l1" } as never);
     vi.mocked(prisma.message.delete).mockResolvedValue({ id: "m1" } as never);
 
@@ -88,7 +109,14 @@ describe("/api/orders/[id]/messages", () => {
 
   it("blocks worker from sending chat message before START", async () => {
     vi.mocked(requireAuth).mockResolvedValue({ user: { id: "t1", role: "TJENESTE" } } as never);
-    vi.mocked(prisma.serviceOrder.findUnique).mockResolvedValue({ id: "o1", landlordId: "l1", assignedToId: "t1", status: "PENDING", orderNumber: 10 } as never);
+    vi.mocked(prisma.serviceOrder.findUnique).mockResolvedValue({
+      id: "o1",
+      landlordId: "l1",
+      assignedToId: "t1",
+      assignmentStatus: "CONFIRMED",
+      status: "PENDING",
+      orderNumber: 10,
+    } as never);
 
     const req = new Request("http://localhost", {
       method: "POST",

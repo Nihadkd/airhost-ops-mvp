@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { hasMailConfiguration } from "@/lib/env";
+import { env, hasMailConfiguration } from "@/lib/env";
 import { sendPasswordResetEmail } from "@/lib/auth-email";
 import { signToken } from "@/lib/secure-token";
 
@@ -21,15 +21,12 @@ export async function POST(req: Request) {
       return NextResponse.json({ code: "INVALID_PAYLOAD", error: "Invalid payload" }, { status: 400 });
     }
 
-    if (!hasMailConfiguration()) {
-      return NextResponse.json({ code: "MAIL_NOT_CONFIGURED", error: "Email service unavailable" }, { status: 503 });
-    }
-
     const user = await prisma.user.findFirst({
       where: { email: { equals: email, mode: "insensitive" } },
       select: { id: true, email: true, isActive: true },
     });
 
+    let debugResetUrl: string | null = null;
     if (user && user.isActive) {
       const tokenPayload: ResetRequestPayload = {
         type: "reset_password",
@@ -40,10 +37,19 @@ export async function POST(req: Request) {
         },
       };
       const token = signToken(tokenPayload);
-      await sendPasswordResetEmail({ to: user.email, token });
+      if (hasMailConfiguration()) {
+        await sendPasswordResetEmail({ to: user.email, token });
+      } else if (env.NODE_ENV !== "production") {
+        const baseUrl =
+          env.APP_BASE_URL ?? env.NEXTAUTH_URL ?? (env.VERCEL_URL ? `https://${env.VERCEL_URL}` : "http://localhost:3000");
+        debugResetUrl = `${baseUrl}/forgot-password?token=${encodeURIComponent(token)}`;
+        console.info("password_reset_debug_url", { email: user.email, debugResetUrl });
+      } else {
+        return NextResponse.json({ code: "MAIL_NOT_CONFIGURED", error: "Email service unavailable" }, { status: 503 });
+      }
     }
 
-    return NextResponse.json({ success: true });
+    return NextResponse.json({ success: true, debugResetUrl });
   } catch (error) {
     console.error("reset_password_request_error", error);
     return NextResponse.json({ code: "RESET_REQUEST_FAILED", error: "Reset request failed" }, { status: 500 });

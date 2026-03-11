@@ -4,7 +4,8 @@ import { requireAuth } from "@/lib/rbac";
 import { claimOrderForWorker } from "@/lib/services/order-claim-service";
 import { orderIdParamSchema } from "@/lib/validators";
 import { prisma } from "@/lib/prisma";
-import { sendOrderClaimedEmail } from "@/lib/email-notifications";
+import { sendWorkerAcceptedAssignmentEmail } from "@/lib/email-notifications";
+import { notifyUserEvent } from "@/lib/user-event-notifications";
 
 export async function PUT(_: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
@@ -30,11 +31,27 @@ export async function PUT(_: Request, { params }: { params: Promise<{ id: string
       select: { id: true, email: true, name: true },
     });
     if (landlord) {
-      await sendOrderClaimedEmail({
-        to: { email: landlord.email, name: landlord.name },
-        orderId: order.id,
-        orderNumber: order.orderNumber,
-        workerName: session.user.name || "Tjenesteutfører",
+      await notifyUserEvent({
+        recipient: {
+          userId: landlord.id,
+          email: landlord.email,
+          name: landlord.name,
+        },
+        actorUserId: session.user.id,
+        message: `${session.user.name || "Tjenesteutforer"} vil utfore oppdrag #${order.orderNumber}. Du ma godkjenne.`,
+        targetUrl: `/orders/${order.id}`,
+        push: {
+          title: "Godkjenn tjenesteutforer",
+          body: `${session.user.name || "Tjenesteutforer"} venter pa godkjenning for oppdrag #${order.orderNumber}.`,
+          data: { orderId: order.id, type: "assignment_pending_landlord", path: `/orders/${order.id}` },
+        },
+        email: () =>
+          sendWorkerAcceptedAssignmentEmail({
+            to: { email: landlord.email, name: landlord.name },
+            orderId: order.id,
+            orderNumber: order.orderNumber,
+            workerName: session.user.name || "Tjenesteutforer",
+          }),
       });
     }
 

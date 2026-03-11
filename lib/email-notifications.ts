@@ -201,3 +201,65 @@ export async function sendPaymentConfirmedEmail(input: {
     ctaUrl: orderUrl(input.orderId),
   });
 }
+
+export async function sendAssignmentOfferedEmail(input: {
+  to: Recipient;
+  orderId: string;
+  orderNumber: number;
+  address: string;
+}) {
+  return sendEventMail({
+    to: input.to,
+    subject: `Oppdrag venter på din godkjenning (#${input.orderNumber})`,
+    title: "Du har fått et oppdrag til vurdering",
+    body: `Oppdrag #${input.orderNumber} på ${input.address} er tildelt deg. Åpne oppdraget og godkjenn eller avbryt.`,
+    ctaLabel: "Åpne oppdrag",
+    ctaUrl: orderUrl(input.orderId),
+  });
+}
+
+export async function sendWorkerAcceptedAssignmentEmail(input: {
+  to: Recipient;
+  orderId: string;
+  orderNumber: number;
+  workerName: string;
+}) {
+  return sendEventMail({
+    to: input.to,
+    subject: `Godkjenn tjenesteutfører for oppdrag #${input.orderNumber}`,
+    title: "Tjenesteutfører venter på godkjenning",
+    body: `${input.workerName} har bekreftet at vedkommende vil utføre oppdrag #${input.orderNumber}. Du må godkjenne tjenesteutføreren før oppdraget kan starte.`,
+    ctaLabel: "Godkjenn oppdrag",
+    ctaUrl: orderUrl(input.orderId),
+  });
+}
+
+export async function sendAssignmentConfirmedEmail(input: {
+  to: Recipient;
+  orderId: string;
+  orderNumber: number;
+}) {
+  return sendEventMail({
+    to: input.to,
+    subject: `Oppdrag bekreftet (#${input.orderNumber})`,
+    title: "Oppdraget er godkjent",
+    body: `Du er nå godkjent som tjenesteutfører for oppdrag #${input.orderNumber}.`,
+    ctaLabel: "Åpne oppdrag",
+    ctaUrl: orderUrl(input.orderId),
+  });
+}
+
+export async function sendAssignmentCancelledEmail(input: {
+  to: Recipient;
+  orderId: string;
+  orderNumber: number;
+}) {
+  return sendEventMail({
+    to: input.to,
+    subject: `Tildeling avbrutt (#${input.orderNumber})`,
+    title: "Tildelingen er avbrutt",
+    body: `Tildelingen for oppdrag #${input.orderNumber} er avbrutt.`,
+    ctaLabel: "Åpne oppdrag",
+    ctaUrl: orderUrl(input.orderId),
+  });
+}

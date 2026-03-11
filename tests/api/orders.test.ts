@@ -266,6 +266,7 @@ describe("/api/orders", () => {
       id: "o2",
       landlordId: "l1",
       assignedToId: "t1",
+      assignmentStatus: "CONFIRMED",
       orderNumber: 102,
       date: new Date("2026-03-10T10:00:00.000Z"),
       status: "PENDING",
@@ -274,6 +275,7 @@ describe("/api/orders", () => {
       id: "o1",
       landlordId: "l1",
       assignedToId: "t1",
+      assignmentStatus: "CONFIRMED",
       orderNumber: 101,
       date: new Date("2026-03-05T10:00:00.000Z"),
       status: "PENDING",
@@ -298,6 +300,7 @@ describe("/api/orders", () => {
       id: "o1",
       landlordId: "l1",
       assignedToId: "t1",
+      assignmentStatus: "CONFIRMED",
       orderNumber: 101,
       date: new Date("2026-03-05T10:00:00.000Z"),
       status: "PENDING",
@@ -306,6 +309,7 @@ describe("/api/orders", () => {
       id: "o1",
       landlordId: "l1",
       assignedToId: "t1",
+      assignmentStatus: "CONFIRMED",
       orderNumber: 101,
       date: new Date("2026-03-05T10:00:00.000Z"),
       status: "PENDING",
@@ -360,8 +364,10 @@ describe("/api/orders", () => {
       date: new Date("2026-03-01T10:00:00.000Z"),
       landlordId: "l1",
       assignedToId: null,
+      assignmentStatus: "UNASSIGNED",
       status: "PENDING",
     } as never);
+    vi.mocked(prisma.user.findUnique).mockResolvedValue({ id: "l1", email: "l@example.com", name: "Landlord" } as never);
     vi.mocked(prisma.serviceOrder.findFirst).mockResolvedValue(null as never);
     vi.mocked(prisma.serviceOrder.updateMany).mockResolvedValue({ count: 1 } as never);
 
@@ -372,7 +378,7 @@ describe("/api/orders", () => {
         data: expect.objectContaining({
           userId: "l1",
           actorUserId: "t1",
-          message: expect.stringContaining("er tatt av"),
+          message: expect.stringContaining("Du ma godkjenne"),
         }),
       }),
     );
@@ -391,7 +397,7 @@ describe("/api/orders", () => {
         data: expect.objectContaining({
           orderId: "o1",
           path: "/orders/o1",
-          type: "order_claimed",
+          type: "assignment_pending_landlord",
         }),
       }),
     );
@@ -432,6 +438,7 @@ describe("/api/orders", () => {
       date: new Date("2026-03-01T12:00:00.000Z"),
       landlordId: "l1",
       assignedToId: null,
+      assignmentStatus: "UNASSIGNED",
       status: "PENDING",
     } as never);
     vi.mocked(prisma.serviceOrder.findFirst).mockResolvedValue({
@@ -441,6 +448,7 @@ describe("/api/orders", () => {
       date: new Date("2026-03-01T10:00:00.000Z"),
       landlordId: "l1",
       assignedToId: null,
+      assignmentStatus: "UNASSIGNED",
       status: "PENDING",
     } as never);
 
@@ -449,7 +457,6 @@ describe("/api/orders", () => {
     expect(res.status).toBe(409);
     expect(data).toEqual(
       expect.objectContaining({
-        error: "Du må fullføre tidligere oppdrag på denne adressen før du kan starte dette.",
         code: "ADDRESS_SEQUENCE_BLOCKED",
       }),
     );
@@ -466,13 +473,26 @@ describe("/api/orders", () => {
       isActive: true,
       canService: true,
     } as never);
-    vi.mocked(prisma.serviceOrder.update).mockResolvedValue({
-      id: "o1",
-      orderNumber: 777,
-      address: "Karl Johans gate 1",
-      date: new Date("2026-02-21T12:00:00.000Z"),
+    vi.mocked(prisma.serviceOrder.findUnique)
+      .mockResolvedValueOnce({
+        id: "o1",
+        orderNumber: 777,
+        address: "Karl Johans gate 1",
+        date: new Date("2026-02-21T12:00:00.000Z"),
+        assignedToId: null,
+        assignmentStatus: "UNASSIGNED",
+      } as never)
+      .mockResolvedValueOnce({
+        id: "o1",
+        orderNumber: 777,
+        address: "Karl Johans gate 1",
+        date: new Date("2026-02-21T12:00:00.000Z"),
+        assignedToId: "t1",
+        assignmentStatus: "PENDING_WORKER_ACCEPTANCE",
+      } as never);
+    vi.mocked(prisma.serviceOrder.updateMany).mockResolvedValue({
+      count: 1,
     } as never);
-
     const req = new Request("http://localhost", {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
@@ -489,7 +509,7 @@ describe("/api/orders", () => {
         data: expect.objectContaining({
           orderId: "o1",
           path: "/orders/o1",
-          type: "order_assigned",
+          type: "assignment_offered",
         }),
       }),
     );

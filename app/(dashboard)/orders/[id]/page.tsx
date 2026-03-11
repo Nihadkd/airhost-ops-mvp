@@ -39,7 +39,9 @@ export default async function OrderDetailsPage({ params }: { params: Promise<{ i
     isAdminAccount ||
     role === "ADMIN" ||
     (role === "UTLEIER" && order.landlordId === session.user.id) ||
-    (role === "TJENESTE" && (order.assignedToId === session.user.id || (!order.assignedToId && order.status === "PENDING")));
+    (role === "TJENESTE" &&
+      (order.assignedToId === session.user.id ||
+        (!order.assignedToId && order.status === "PENDING" && order.assignmentStatus === "UNASSIGNED")));
 
   if (!allowed) return <div className="panel p-5">Ingen tilgang.</div>;
 
@@ -77,6 +79,7 @@ export default async function OrderDetailsPage({ params }: { params: Promise<{ i
       initialOrder={{
         ...orderWithRating,
         messages: [],
+        assignmentStatus: order.assignmentStatus,
         canStart: startAvailability.canStart,
         startBlockedByOrderId: startAvailability.blockedByOrderId,
         startBlockedByOrderNumber: startAvailability.blockedByOrderNumber,

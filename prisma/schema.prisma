@@ -30,6 +30,13 @@ enum OrderStatus {
   COMPLETED
 }
 
+enum AssignmentStatus {
+  UNASSIGNED
+  PENDING_WORKER_ACCEPTANCE
+  PENDING_LANDLORD_APPROVAL
+  CONFIRMED
+}
+
 model User {
   id                String         @id @default(cuid())
   name              String
@@ -78,6 +85,7 @@ model ServiceOrder {
   address       String
   date          DateTime
   status        OrderStatus  @default(PENDING)
+  assignmentStatus AssignmentStatus @default(UNASSIGNED)
   note          String?
   guestCount    Int?
   completionNote String?

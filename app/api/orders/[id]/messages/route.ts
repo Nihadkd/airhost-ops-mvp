@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAuth } from "@/lib/rbac";
 import { apiError, handleApiError } from "@/lib/api";
+import { assignmentStatuses } from "@/lib/order-assignment";
 import { canAssignedWorkerWriteOrder, isAssignedWorkerPendingStart } from "@/lib/order-worker-access";
 import { messageCreateSchema } from "@/lib/validators";
 import { sendOrderMessageEmail } from "@/lib/email-notifications";
@@ -10,7 +11,7 @@ import { notifyUserEvent } from "@/lib/user-event-notifications";
 async function getOrderIfParticipant(orderId: string, userId: string, isAdmin: boolean) {
   const order = await prisma.serviceOrder.findUnique({
     where: { id: orderId },
-    select: { id: true, landlordId: true, assignedToId: true, status: true, orderNumber: true },
+    select: { id: true, landlordId: true, assignedToId: true, assignmentStatus: true, status: true, orderNumber: true },
   });
   if (!order) return { ok: false as const, order: null };
 
@@ -61,6 +62,11 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
 
     const isLandlordParticipant = access.order.landlordId === session.user.id;
     const isWorkerParticipant = access.order.assignedToId === session.user.id;
+    if (!isAdmin && access.order.assignmentStatus !== assignmentStatuses.CONFIRMED) {
+      return apiError(409, "Chat is locked until the assignment is approved by both parties.", {
+        code: "ASSIGNMENT_NOT_CONFIRMED",
+      });
+    }
     if (
       isAssignedWorkerPendingStart(access.order, session.user.id, isAdmin) ||
       (isWorkerParticipant && !canAssignedWorkerWriteOrder(access.order, session.user.id, isAdmin))

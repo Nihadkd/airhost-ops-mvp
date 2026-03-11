@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAuth } from "@/lib/rbac";
 import { apiError, handleApiError } from "@/lib/api";
+import { assignmentStatuses } from "@/lib/order-assignment";
 import { canAssignedWorkerStartOrder, canAssignedWorkerWriteOrder } from "@/lib/order-worker-access";
 import { getStartAvailabilityForWorker, startOrderForWorker } from "@/lib/services/order-start-service";
 import { orderUpdateSchema } from "@/lib/validators";
@@ -15,7 +16,14 @@ async function canView(orderId: string, userId: string, role: string, isAdminAcc
   if (isAdminAccount || role === "ADMIN") return { ok: true, order };
   if (role === "UTLEIER" && order.landlordId === userId) return { ok: true, order };
   if (role === "TJENESTE" && order.assignedToId === userId) return { ok: true, order };
-  if (role === "TJENESTE" && order.assignedToId === null && order.status === "PENDING") return { ok: true, order };
+  if (
+    role === "TJENESTE" &&
+    order.assignedToId === null &&
+    order.status === "PENDING" &&
+    order.assignmentStatus === assignmentStatuses.UNASSIGNED
+  ) {
+    return { ok: true, order };
+  }
   return { ok: false, order };
 }
 
@@ -105,7 +113,12 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
           return NextResponse.json(started);
         }
         if (parsed.data.status === "IN_PROGRESS") {
-          return apiError(409, "Du må fullføre tidligere oppdrag før du kan starte dette.", {
+          if (access.order.assignmentStatus !== assignmentStatuses.CONFIRMED) {
+            return apiError(409, "Job assignment is not fully approved yet.", {
+              code: "ASSIGNMENT_NOT_CONFIRMED",
+            });
+          }
+          return apiError(409, "Du mÃ¥ fullfÃ¸re tidligere oppdrag fÃ¸r du kan starte dette.", {
             code: "WORKER_SEQUENCE_BLOCKED",
           });
         }
@@ -120,7 +133,7 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
     const updated = await prisma.serviceOrder.update({ where: { id }, data });
 
     if (session.user.role === "TJENESTE" && parsed.data.status === "COMPLETED") {
-      const doneMessage = `Oppdrag #${access.order.orderNumber} er utført og klart for betaling.`;
+      const doneMessage = `Oppdrag #${access.order.orderNumber} er utfÃ¸rt og klart for betaling.`;
       const landlord = await prisma.user.findUnique({
         where: { id: access.order.landlordId },
         select: { id: true, email: true, name: true },
@@ -136,7 +149,7 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
           message: doneMessage,
           targetUrl: `/orders/${id}`,
           push: {
-            title: "Oppdrag utført",
+            title: "Oppdrag utfÃ¸rt",
             body: doneMessage,
             data: { orderId: id, type: "order_completed", path: `/orders/${id}` },
           },

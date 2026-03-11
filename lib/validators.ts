@@ -79,6 +79,10 @@ export const assignSchema = z.object({
   assignedToId: z.string().min(1),
 });
 
+export const orderAssignmentActionSchema = z.object({
+  reason: z.string().max(300).optional(),
+});
+
 export const orderIdParamSchema = z.object({
   id: z.string().min(1),
 });

@@ -9,6 +9,7 @@ export type ClaimableOrder = {
   address: string;
   date: Date;
   status: OrderStatus;
+  assignmentStatus: "UNASSIGNED" | "PENDING_WORKER_ACCEPTANCE" | "PENDING_LANDLORD_APPROVAL" | "CONFIRMED";
   assignedToId: string | null;
   landlordId: string;
 };
@@ -19,6 +20,7 @@ const claimOrderSelect = {
   address: true,
   date: true,
   status: true,
+  assignmentStatus: true,
   assignedToId: true,
   landlordId: true,
 } satisfies Prisma.ServiceOrderSelect;
@@ -71,11 +73,12 @@ export async function markOrderAsClaimed(tx: OrderRepositoryClient, orderId: str
     where: {
       id: orderId,
       status: "PENDING",
+      assignmentStatus: "UNASSIGNED",
       assignedToId: null,
     },
     data: {
-      status: "IN_PROGRESS",
       assignedToId: workerId,
+      assignmentStatus: "PENDING_LANDLORD_APPROVAL",
     },
   });
 }

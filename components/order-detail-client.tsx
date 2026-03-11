@@ -34,6 +34,7 @@ type Order = {
   id: string;
   orderNumber?: number;
   updatedAt: string | Date;
+  assignmentStatus?: "UNASSIGNED" | "PENDING_WORKER_ACCEPTANCE" | "PENDING_LANDLORD_APPROVAL" | "CONFIRMED";
   canStart?: boolean;
   startBlockedByOrderId?: string | null;
   startBlockedByOrderNumber?: number | null;
@@ -154,15 +155,19 @@ export function OrderDetailClient({
   const isWorkerParticipant = order.assignedTo?.id === currentUserId;
   const isParticipant = isLandlordParticipant || isWorkerParticipant;
   const isPrivateChatParticipant = isParticipant || role === "ADMIN";
-  const canUseJobChat = !!order.assignedTo?.id && isPrivateChatParticipant;
+  const assignmentStatus = order.assignmentStatus ?? "UNASSIGNED";
+  const isAssignmentConfirmed = assignmentStatus === "CONFIRMED";
+  const isAwaitingWorkerAcceptance = assignmentStatus === "PENDING_WORKER_ACCEPTANCE";
+  const isAwaitingLandlordApproval = assignmentStatus === "PENDING_LANDLORD_APPROVAL";
+  const canUseJobChat = !!order.assignedTo?.id && isAssignmentConfirmed && isPrivateChatParticipant;
   const isReadOnlyChat = !isParticipant;
-  const workerPendingStart = role !== "ADMIN" && isWorkerParticipant && order.status === "PENDING";
+  const workerPendingStart = role !== "ADMIN" && isWorkerParticipant && order.status === "PENDING" && isAssignmentConfirmed;
   const canWorkerWriteToJob = role === "ADMIN" || !isWorkerParticipant || order.status === "IN_PROGRESS";
   const canWorkerSendMessages = !isReadOnlyChat && canWorkerWriteToJob;
   const canWorkerUpload = (role === "TJENESTE" || role === "ADMIN") && canWorkerWriteToJob;
   const canWorkerComplete = (role === "TJENESTE" || role === "ADMIN") && order.status === "IN_PROGRESS";
   const canCommentOnImages = role === "ADMIN" || !isWorkerParticipant || order.status === "IN_PROGRESS";
-  const canStartOrder = (role === "TJENESTE" || role === "ADMIN") && !!order.assignedTo && order.status === "PENDING";
+  const canStartOrder = (role === "TJENESTE" || role === "ADMIN") && !!order.assignedTo && order.status === "PENDING" && isAssignmentConfirmed;
   const startAvailableNow = role === "ADMIN" ? canStartOrder : canStartOrder && order.canStart === true;
 
   const landlordImageCount = useMemo(() => {
@@ -201,6 +206,22 @@ export function OrderDetailClient({
   }, [lang, order.guestCount, t]);
   const orderTypeLabel =
     order.type === "CLEANING" ? t("serviceCleaningName") : order.type === "KEY_HANDLING" ? t("serviceKeyHandlingName") : order.type;
+  const assignmentStatusLabel =
+    assignmentStatus === "PENDING_WORKER_ACCEPTANCE"
+      ? t("assignmentPendingWorker")
+      : assignmentStatus === "PENDING_LANDLORD_APPROVAL"
+        ? t("assignmentPendingLandlord")
+        : assignmentStatus === "CONFIRMED"
+          ? t("assignmentConfirmed")
+          : t("assignmentUnassigned");
+  const assignmentStatusHint =
+    assignmentStatus === "PENDING_WORKER_ACCEPTANCE"
+      ? t("assignmentPendingWorkerHint")
+      : assignmentStatus === "PENDING_LANDLORD_APPROVAL"
+        ? t("assignmentPendingLandlordHint")
+        : assignmentStatus === "CONFIRMED"
+          ? t("assignmentConfirmedHint")
+          : t("assignmentUnassignedHint");
   const closeFullscreenImage = useCallback(() => {
     setFullscreenImageUrl(null);
     setFullscreenZoom(1);
@@ -388,15 +409,57 @@ export function OrderDetailClient({
   };
 
   const claimJob = async () => {
-    if ((role !== "TJENESTE" && role !== "ADMIN") || order.assignedTo) return;
+    if ((role !== "TJENESTE" && role !== "ADMIN") || order.assignedTo || assignmentStatus !== "UNASSIGNED") return;
     setClaiming(true);
     const res = await fetch(`/api/orders/${order.id}/claim`, { method: "PUT" });
     setClaiming(false);
     if (!res.ok) {
-      toast.error(t("cannotTakeJob"));
+      await showApiError(res, "cannotTakeJob");
       return;
     }
-    toast.success(t("takenJob"));
+    toast.success(t("assignmentApprovalRequested"));
+    await refresh();
+  };
+
+  const acceptAssignment = async () => {
+    setClaiming(true);
+    const res = await fetch(`/api/orders/${order.id}/assignment/accept`, { method: "PUT" });
+    setClaiming(false);
+    if (!res.ok) {
+      await showApiError(res);
+      return;
+    }
+    toast.success(t("assignmentAcceptedSuccess"));
+    await refresh();
+  };
+
+  const approveAssignment = async () => {
+    setStatusSaving(true);
+    const res = await fetch(`/api/orders/${order.id}/assignment/approve`, { method: "PUT" });
+    setStatusSaving(false);
+    if (!res.ok) {
+      await showApiError(res);
+      return;
+    }
+    toast.success(t("assignmentApprovedSuccess"));
+    await refresh();
+  };
+
+  const cancelAssignment = async () => {
+    const confirmed = window.confirm(t("confirmCancelAssignment"));
+    if (!confirmed) return;
+    setAssignSaving(true);
+    const res = await fetch(`/api/orders/${order.id}/assignment/cancel`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({}),
+    });
+    setAssignSaving(false);
+    if (!res.ok) {
+      await showApiError(res);
+      return;
+    }
+    toast.success(t("assignmentCancelledSuccess"));
     await refresh();
   };
 
@@ -477,6 +540,7 @@ export function OrderDetailClient({
     setOrder((prev) => ({
       ...prev,
       assignedTo: nextWorker ? { id: nextWorker.id, name: nextWorker.name, email: null } : prev.assignedTo,
+      assignmentStatus: "PENDING_WORKER_ACCEPTANCE",
     }));
     toast.success(t("orderAssignedSuccess"));
     setAssignSaving(false);
@@ -897,6 +961,10 @@ export function OrderDetailClient({
             t("noneAssigned")
           )}
         </p>
+        <div className="mt-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm">
+          <p className="font-semibold text-slate-900">{t("assignmentStatusLabel")}: {assignmentStatusLabel}</p>
+          <p className="mt-1 text-slate-600">{assignmentStatusHint}</p>
+        </div>
         {isPrivateChatParticipant && canUseJobChat && (
           <a href="#job-chat" className="mt-2 ml-3 inline-block text-sm font-semibold text-teal-700 underline">
             Chat
@@ -1131,10 +1199,20 @@ export function OrderDetailClient({
 
         {(role === "TJENESTE" || role === "ADMIN") && (
           <div className="mt-3 flex flex-wrap gap-2">
-            {!order.assignedTo && (
+            {!order.assignedTo && assignmentStatus === "UNASSIGNED" && (
               <button className="btn btn-primary" disabled={claiming} onClick={() => void claimJob()}>
                 {claiming ? "..." : t("takeJob")}
               </button>
+            )}
+            {isWorkerParticipant && isAwaitingWorkerAcceptance && (
+              <>
+                <button className="btn btn-primary" disabled={claiming} onClick={() => void acceptAssignment()}>
+                  {claiming ? "..." : t("acceptAssignmentAction")}
+                </button>
+                <button className="btn btn-secondary" disabled={assignSaving} onClick={() => void cancelAssignment()}>
+                  {assignSaving ? t("saving") : t("cancelAssignmentAction")}
+                </button>
+              </>
             )}
             {canStartOrder && (
               <button
@@ -1161,9 +1239,37 @@ export function OrderDetailClient({
                 </option>
               ))}
             </select>
-            <button className="btn btn-primary" disabled={assignSaving}>{assignSaving ? t("assigning") : t("assignAction")}</button>
+            <button className="btn btn-primary" disabled={assignSaving || assignmentStatus !== "UNASSIGNED"}>
+              {assignSaving ? t("assigning") : t("assignAction")}
+            </button>
+            {order.assignedTo && assignmentStatus !== "UNASSIGNED" ? (
+              <button className="btn btn-secondary" type="button" disabled={assignSaving} onClick={() => void cancelAssignment()}>
+                {assignSaving ? t("saving") : t("cancelAssignmentAction")}
+              </button>
+            ) : null}
           </form>
         )}
+
+        {(role === "ADMIN" || isLandlordParticipant) && isAwaitingLandlordApproval && order.assignedTo ? (
+          <div className="mt-4 flex flex-wrap gap-2">
+            <button className="btn btn-primary" type="button" disabled={statusSaving} onClick={() => void approveAssignment()}>
+              {statusSaving ? t("saving") : t("approveAssignmentAction")}
+            </button>
+            <button className="btn btn-secondary" type="button" disabled={assignSaving} onClick={() => void cancelAssignment()}>
+              {assignSaving ? t("saving") : t("cancelAssignmentAction")}
+            </button>
+          </div>
+        ) : null}
+
+        {(role === "ADMIN" || isLandlordParticipant) &&
+        order.assignedTo &&
+        assignmentStatus === "PENDING_WORKER_ACCEPTANCE" ? (
+          <div className="mt-4 flex flex-wrap gap-2">
+            <button className="btn btn-secondary" type="button" disabled={assignSaving} onClick={() => void cancelAssignment()}>
+              {assignSaving ? t("saving") : t("cancelAssignmentAction")}
+            </button>
+          </div>
+        ) : null}
 
         {(role === "UTLEIER" || role === "ADMIN") && order.status === "COMPLETED" && order.assignedTo && (
           <form action={submitReview} className="mt-4 rounded border border-slate-200 p-3">
@@ -1214,7 +1320,7 @@ export function OrderDetailClient({
           ) : (
             <div>
               <h2 className="text-lg font-semibold">{t("privateChat")}</h2>
-              <p className="mt-1 text-sm text-slate-600">{t("chatPendingHint")}</p>
+              <p className="mt-1 text-sm text-slate-600">{isAssignmentConfirmed ? t("chatPendingHint") : assignmentStatusHint}</p>
             </div>
           )}
         </section>

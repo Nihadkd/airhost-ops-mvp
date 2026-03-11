@@ -9,6 +9,7 @@ type StartOrderResult = {
   id: string;
   status: "PENDING" | "IN_PROGRESS" | "COMPLETED";
   assignedToId: string | null;
+  assignmentStatus?: string | null;
 };
 
 type StartOrderInput = {
@@ -41,6 +42,7 @@ async function runStartTransaction(input: StartOrderInput) {
         orderNumber: true,
         date: true,
         status: true,
+        assignmentStatus: true,
         assignedToId: true,
       },
     });
@@ -51,6 +53,10 @@ async function runStartTransaction(input: StartOrderInput) {
 
     if (targetOrder.assignedToId !== input.workerId) {
       throw new ApiRouteError(403, "Forbidden");
+    }
+
+    if (targetOrder.assignmentStatus !== "CONFIRMED") {
+      throw new ApiRouteError(409, "Order assignment is not fully approved yet", { code: "ASSIGNMENT_NOT_CONFIRMED" });
     }
 
     if (targetOrder.status === "IN_PROGRESS") {
@@ -71,6 +77,7 @@ async function runStartTransaction(input: StartOrderInput) {
         orderNumber: true,
         date: true,
         status: true,
+        assignmentStatus: true,
         assignedToId: true,
       },
       orderBy: [{ date: "asc" }, { orderNumber: "asc" }],
@@ -97,6 +104,7 @@ async function runStartTransaction(input: StartOrderInput) {
         id: true,
         status: true,
         assignedToId: true,
+        assignmentStatus: true,
       },
     });
   }, {
@@ -127,11 +135,12 @@ export async function getStartAvailabilityForWorker(orderId: string, workerId: s
       orderNumber: true,
       date: true,
       status: true,
+      assignmentStatus: true,
       assignedToId: true,
     },
   });
 
-  if (!order || order.assignedToId !== workerId || order.status !== "PENDING") {
+  if (!order || order.assignedToId !== workerId || order.status !== "PENDING" || order.assignmentStatus !== "CONFIRMED") {
     return {
       canStart: false,
       blockedByOrderId: null,
@@ -142,7 +151,10 @@ export async function getStartAvailabilityForWorker(orderId: string, workerId: s
   const earliestOpenOrder = await prisma.serviceOrder.findFirst({
     where: {
       assignedToId: workerId,
-      status: { in: ["PENDING", "IN_PROGRESS"] },
+      OR: [
+        { status: "IN_PROGRESS" },
+        { status: "PENDING", assignmentStatus: "CONFIRMED" },
+      ],
     },
     select: {
       id: true,
