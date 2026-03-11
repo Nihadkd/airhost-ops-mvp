@@ -168,6 +168,7 @@ export async function GET(req: Request) {
       },
     });
   } catch (error) {
+    console.error("Dashboard API failed", error);
     return handleApiError(error);
   }
 }

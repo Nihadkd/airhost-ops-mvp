@@ -18,6 +18,24 @@ try {
   await page.goto(`${baseUrl}/orders/my`, { waitUntil: "domcontentloaded", timeout: 60000 });
   await page.waitForLoadState("networkidle", { timeout: 30000 });
 
+  const apiProbe = await page.evaluate(async () => {
+    const probe = async (status) => {
+      const res = await fetch(`/api/dashboard?view=my&status=${status}&page=1&pageSize=20`, { cache: "no-store" });
+      const text = await res.text();
+      return { status: res.status, body: text.slice(0, 300) };
+    };
+    return {
+      all: await probe("all"),
+      ongoing: await probe("ongoing"),
+      completed: await probe("completed"),
+      activeDefault: await (async () => {
+        const res = await fetch("/api/dashboard?page=1&pageSize=20", { cache: "no-store" });
+        const text = await res.text();
+        return { status: res.status, body: text.slice(0, 300) };
+      })(),
+    };
+  });
+
   const bodyText = await page.locator("body").innerText();
   const signInFailedVisible = await page.getByText("Sign-in failed. Please try again.", { exact: false }).isVisible().catch(() => false);
   const genericErrorVisible = await page.getByText("Something went wrong. Please try again.", { exact: false }).isVisible().catch(() => false);
@@ -34,6 +52,7 @@ try {
       genericErrorVisible,
       noJobsVisible,
       jobsCountText,
+      apiProbe,
       bodySnippet: bodyText.slice(0, 1000),
       screenshotPath,
     }),
