@@ -100,35 +100,45 @@ export async function GET(req: Request) {
 
     const totalPromise = prisma.serviceOrder.count({ where: whereWithDate });
 
-    const ordersPromise = prisma.serviceOrder.findMany({
-      where: whereWithDate,
-      include: {
-        landlord: { select: { id: true, name: true } },
-        assignedTo: { select: { id: true, name: true } },
-        receipt: { select: { amountNok: true } },
-      },
-      orderBy,
-      skip: (page - 1) * pageSize,
-      take: pageSize,
-    }).then((rows) =>
-      rows.map((row) => ({
-        id: row.id,
-        orderNumber: row.orderNumber,
-        type: row.type,
-        address: row.address,
-        status: row.status,
-        date: row.date,
-        createdAt: row.createdAt,
-        updatedAt: row.updatedAt,
-        assignedToId: row.assignedToId,
-        landlord: row.landlord,
-        assignedTo: row.assignedTo,
-        paymentStatus: derivePaymentStatus({
-          paymentIntent: row.paymentIntent,
-          receiptAmountNok: row.receipt?.amountNok ?? null,
-        }),
-      })),
-    );
+    const loadOrders = async (includeReceipt: boolean) => {
+      const rows = await prisma.serviceOrder.findMany({
+        where: whereWithDate,
+        include: {
+          landlord: { select: { id: true, name: true } },
+          assignedTo: { select: { id: true, name: true } },
+          ...(includeReceipt ? { receipt: { select: { amountNok: true } } } : {}),
+        },
+        orderBy,
+        skip: (page - 1) * pageSize,
+        take: pageSize,
+      });
+
+      return rows.map((row) => {
+        const receipt = "receipt" in row ? row.receipt : null;
+        return {
+          id: row.id,
+          orderNumber: row.orderNumber,
+          type: row.type,
+          address: row.address,
+          status: row.status,
+          date: row.date,
+          createdAt: row.createdAt,
+          updatedAt: row.updatedAt,
+          assignedToId: row.assignedToId,
+          landlord: row.landlord,
+          assignedTo: row.assignedTo,
+          paymentStatus: derivePaymentStatus({
+            paymentIntent: row.paymentIntent,
+            receiptAmountNok: receipt?.amountNok ?? null,
+          }),
+        };
+      });
+    };
+
+    const ordersPromise = loadOrders(true).catch(async (receiptError) => {
+      console.error("Dashboard orders receipt include failed, retrying without receipt", receiptError);
+      return loadOrders(false);
+    });
 
     const statsPromise =
       isAdmin
