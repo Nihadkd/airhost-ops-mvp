@@ -2,7 +2,6 @@
 
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import toast from "react-hot-toast";
 import { PaymentBadge } from "@/components/payment-badge";
 import { StatusBadge } from "@/components/status-badge";
 import { useLanguage } from "@/lib/language-context";
@@ -57,6 +56,7 @@ export default function MyOrdersPage() {
   const router = useRouter();
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
   const [filters, setFilters] = useState<Filters>(initialFilters);
   const [debouncedFilters, setDebouncedFilters] = useState<Filters>(initialFilters);
   const [page, setPage] = useState(1);
@@ -94,6 +94,7 @@ export default function MyOrdersPage() {
     const res = await fetch(`/api/dashboard${queryString}`, { cache: "no-store" });
     if (!res.ok) return res.status;
     const data = (await res.json()) as DashboardPayload;
+    setLoadError(false);
     setOrders(data.orders);
     if (data.filters?.status) {
       setFilters((prev) => ({ ...prev, status: data.filters?.status ?? prev.status }));
@@ -113,7 +114,7 @@ export default function MyOrdersPage() {
         return;
       }
       if (mounted && status !== 200) {
-        toast.error(t("genericError"));
+        setLoadError(true);
       }
       if (mounted) setLoading(false);
     };
@@ -139,6 +140,9 @@ export default function MyOrdersPage() {
       <div className="panel p-5">
         <h1 className="text-2xl font-bold">{t("myOrdersMenu")}</h1>
         <p className="text-sm text-slate-600">{t("myOrdersHint")}</p>
+        {loadError ? (
+          <p className="mt-2 text-sm text-amber-700">{t("genericError")}</p>
+        ) : null}
       </div>
 
       <div className="mb-3 flex items-center justify-between text-sm text-slate-600">

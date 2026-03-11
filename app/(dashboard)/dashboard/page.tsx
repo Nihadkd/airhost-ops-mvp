@@ -3,7 +3,6 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import toast from "react-hot-toast";
 import { PaymentBadge } from "@/components/payment-badge";
 import { StatusBadge } from "@/components/status-badge";
 import { useLanguage } from "@/lib/language-context";
@@ -76,6 +75,7 @@ export default function DashboardPage() {
   const [orders, setOrders] = useState<Order[]>([]);
   const [stats, setStats] = useState<Stats | null>(null);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
   const [filters, setFilters] = useState<Filters>(initialFilters);
   const [debouncedFilters, setDebouncedFilters] = useState<Filters>(initialFilters);
   const [page, setPage] = useState(1);
@@ -132,6 +132,7 @@ export default function DashboardPage() {
       }
 
       const data = (await res.json()) as DashboardPayload;
+      setLoadError(false);
       setMe(data.me);
       setOrders(data.orders);
       setStats(data.stats);
@@ -190,7 +191,7 @@ export default function DashboardPage() {
         return;
       }
       if (mounted && status !== 200) {
-        toast.error(t("genericError"));
+        setLoadError(true);
       }
 
       if (mounted && me?.effectiveRole === "ADMIN") {
@@ -249,6 +250,9 @@ export default function DashboardPage() {
       <div className="panel p-5">
         <h1 className="text-2xl font-bold">{role ? `${roleLabel[role] ?? role}` : ""}</h1>
         <p className="text-sm text-slate-600">{t("overview")}</p>
+        {loadError ? (
+          <p className="mt-2 text-sm text-amber-700">{t("genericError")}</p>
+        ) : null}
       </div>
 
       {isAdmin && stats && (
