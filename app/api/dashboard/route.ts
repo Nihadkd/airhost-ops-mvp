@@ -41,12 +41,7 @@ export async function GET(req: Request) {
         ? view === "completed"
           ? { status: OrderStatus.COMPLETED }
         : view === "my"
-            ? myStatus === "completed"
-              ? { status: OrderStatus.COMPLETED }
-              : {
-                  assignedToId: { not: null },
-                  status: myStatusWhere,
-                }
+            ? { status: myStatusWhere }
             : { status: OrderStatus.PENDING, assignedToId: null }
         : session.user.role === "UTLEIER"
           ? {
@@ -54,9 +49,7 @@ export async function GET(req: Request) {
               ...(view === "completed"
                 ? { status: OrderStatus.COMPLETED }
                 : view === "my"
-                  ? myStatus === "completed"
-                    ? { status: OrderStatus.COMPLETED }
-                    : { assignedToId: { not: null }, status: myStatusWhere }
+                  ? { status: myStatusWhere }
                   : { status: OrderStatus.PENDING, assignedToId: null }),
             }
           : view === "completed"

@@ -46,7 +46,7 @@ describe("/api/dashboard", () => {
     );
   });
 
-  it("returns assigned pending and in-progress orders on my view for landlord", async () => {
+  it("returns all landlord orders on my view for landlord", async () => {
     vi.mocked(requireAuth).mockResolvedValue({ user: { id: "l1", role: "UTLEIER" } } as never);
     vi.mocked(prisma.serviceOrder.count).mockResolvedValue(0 as never);
     vi.mocked(prisma.serviceOrder.findMany).mockResolvedValue([] as never);
@@ -57,7 +57,6 @@ describe("/api/dashboard", () => {
       expect.objectContaining({
         where: {
           landlordId: "l1",
-          assignedToId: { not: null },
           status: { in: ["PENDING", "IN_PROGRESS"] },
         },
       }),
