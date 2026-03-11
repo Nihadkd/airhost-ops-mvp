@@ -237,6 +237,21 @@ export default function DashboardPage() {
     if (Number.isNaN(date.getTime())) return "-";
     return date.toLocaleString(locale, { hour12: false });
   };
+  const formatSchedule = useCallback(
+    (value: string) => {
+      const date = new Date(value);
+      if (Number.isNaN(date.getTime())) return "-";
+      return date.toLocaleString(locale, {
+        weekday: "short",
+        day: "numeric",
+        month: "short",
+        hour: "2-digit",
+        minute: "2-digit",
+        hour12: false,
+      });
+    },
+    [locale],
+  );
 
   const role = me?.effectiveRole;
   const isAdmin = role === "ADMIN";
@@ -244,15 +259,83 @@ export default function DashboardPage() {
     () => orders.filter((order) => order.status === "PENDING" && order.assignedToId === null),
     [orders],
   );
+  const queueCount = visibleOrders.length;
+  const inProgressCount = useMemo(
+    () => orders.filter((order) => order.status === "IN_PROGRESS").length,
+    [orders],
+  );
+  const completedCount = useMemo(
+    () => orders.filter((order) => order.status === "COMPLETED").length,
+    [orders],
+  );
+  const nextOrder = useMemo(() => {
+    return [...orders]
+      .filter((order) => order.status !== "COMPLETED")
+      .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())[0] ?? null;
+  }, [orders]);
+  const summaryCards = [
+    {
+      label: t("jobs"),
+      value: String(total),
+      tone: "bg-white/70 border-slate-200",
+    },
+    {
+      label: t("activeJobs"),
+      value: String(queueCount),
+      tone: "bg-amber-50 border-amber-200",
+    },
+    {
+      label: t("statusInProgress"),
+      value: String(inProgressCount),
+      tone: "bg-sky-50 border-sky-200",
+    },
+    {
+      label: t("completedJobs"),
+      value: String(completedCount),
+      tone: "bg-emerald-50 border-emerald-200",
+    },
+  ];
 
   return (
     <section className="space-y-4">
-      <div className="panel p-5">
-        <h1 className="text-2xl font-bold">{role ? `${roleLabel[role] ?? role}` : ""}</h1>
-        <p className="text-sm text-slate-600">{t("overview")}</p>
+      <div className="panel overflow-hidden p-0">
+        <div className="bg-[linear-gradient(135deg,rgba(11,143,123,0.16),rgba(18,48,61,0.08))] p-5">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.22em] text-teal-700/80">{t("overview")}</p>
+              <h1 className="mt-2 text-3xl font-black tracking-tight">{role ? `${roleLabel[role] ?? role}` : ""}</h1>
+              <p className="mt-2 max-w-2xl text-sm text-slate-600">
+                {nextOrder
+                  ? `${t("next")}: #${nextOrder.orderNumber} • ${nextOrder.address} • ${formatSchedule(nextOrder.date)}`
+                  : t("myOrdersHint")}
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <Link href="/orders/my" className="btn btn-secondary">
+                {t("myOrdersMenu")}
+              </Link>
+              {(role === "UTLEIER" || role === "ADMIN") && (
+                <Link href="/orders/new" className="btn btn-primary">
+                  {t("newOrder")}
+                </Link>
+              )}
+            </div>
+          </div>
+        </div>
         {loadError ? (
-          <p className="mt-2 text-sm text-amber-700">{t("genericError")}</p>
+          <div className="border-t border-amber-200 bg-amber-50 px-5 py-3 text-sm text-amber-800">
+            {t("genericError")}
+          </div>
         ) : null}
+      </div>
+
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        {summaryCards.map((card) => (
+          <div key={card.label} className={`panel border p-4 ${card.tone}`}>
+            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">{card.label}</p>
+            <p className="mt-3 text-3xl font-black tracking-tight text-slate-900">{card.value}</p>
+          </div>
+        ))}
       </div>
 
       {isAdmin && stats && (
@@ -295,7 +378,7 @@ export default function DashboardPage() {
         </div>
       )}
 
-      <div className="mb-3 flex items-center justify-between text-sm text-slate-600">
+      <div className="mb-3 flex flex-col gap-3 text-sm text-slate-600 sm:flex-row sm:items-center sm:justify-between">
         <span>{t("jobs")}: {total}</span>
         <div className="flex items-center gap-2">
           <button className="btn btn-secondary" disabled={page <= 1} onClick={() => setPage((prev) => Math.max(1, prev - 1))}>
@@ -339,7 +422,12 @@ export default function DashboardPage() {
 
         <div className="space-y-3 md:hidden">
           {loading && <p className="text-sm text-slate-500">{t("loadingJobs")}</p>}
-          {!loading && visibleOrders.length === 0 && <p className="text-sm text-slate-500">{t("noJobs")}</p>}
+          {!loading && visibleOrders.length === 0 && (
+            <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 px-4 py-6 text-sm text-slate-600">
+              <p className="font-semibold text-slate-800">{t("noJobs")}</p>
+              <p className="mt-1">{role === "TJENESTE" ? t("myOrdersHint") : t("overview")}</p>
+            </div>
+          )}
           {!loading && visibleOrders.map((order) => (
             <div
               key={order.id}
@@ -364,6 +452,9 @@ export default function DashboardPage() {
               <div className="mt-2">
                 <PaymentBadge status={order.paymentStatus} />
               </div>
+              <p className="mt-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">
+                {formatSchedule(order.date)}
+              </p>
               <p className="mt-1 text-xs text-slate-500">
                 {t("landlords")}:{" "}
                 <span className="font-semibold text-slate-900">{order.landlord.name}</span>
@@ -416,7 +507,12 @@ export default function DashboardPage() {
               )}
               {!loading && visibleOrders.length === 0 && (
                 <tr>
-                  <td className="py-6 text-slate-500" colSpan={9}>{t("noJobs")}</td>
+                  <td className="py-8 text-slate-500" colSpan={9}>
+                    <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 px-4 py-6 text-center">
+                      <p className="font-semibold text-slate-800">{t("noJobs")}</p>
+                      <p className="mt-1 text-sm text-slate-500">{role === "TJENESTE" ? t("myOrdersHint") : t("overview")}</p>
+                    </div>
+                  </td>
                 </tr>
               )}
               {!loading && visibleOrders.map((order) => (
