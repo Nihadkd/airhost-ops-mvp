@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useMemo, useState } from "react";
 import toast from "react-hot-toast";
+import { isGuestCountServiceType, ORDERABLE_SERVICE_TYPES } from "@/lib/service-types";
 
 type UserItem = {
   id: string;
@@ -22,7 +23,7 @@ type OrderItem = {
   address: string;
   date: string | Date;
   status: "PENDING" | "IN_PROGRESS" | "COMPLETED";
-  type: "CLEANING" | "KEY_HANDLING";
+  type: string;
   landlordId: string;
   assignedToId: string | null;
 };
@@ -135,7 +136,9 @@ export function AdminLabClient({
       address: String(formData.get("address") ?? "").trim(),
       date: start.toISOString(),
       deadlineAt: deadline.toISOString(),
-      guestCount: Number(formData.get("guestCount") ?? 1),
+      guestCount: isGuestCountServiceType(String(formData.get("type") ?? "CLEANING"))
+        ? Number(formData.get("guestCount") ?? 1)
+        : undefined,
       note: String(formData.get("note") ?? "").trim() || undefined,
     };
     const res = await fetch("/api/orders", {
@@ -227,7 +230,11 @@ export function AdminLabClient({
           </select>
           <select className="input" name="type" defaultValue="CLEANING">
             <option value="CLEANING">CLEANING</option>
-            <option value="KEY_HANDLING">KEY_HANDLING</option>
+            {ORDERABLE_SERVICE_TYPES.filter((serviceType) => serviceType !== "CLEANING").map((serviceType) => (
+              <option key={serviceType} value={serviceType}>
+                {serviceType}
+              </option>
+            ))}
           </select>
           <input className="input" name="address" placeholder="Adresse" required />
           <input className="input" type="datetime-local" name="date" required />

@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useLanguage } from "@/lib/language-context";
+import { getServiceTypeTranslationKey } from "@/lib/service-types";
 
 type Conversation = {
   id: string;
@@ -32,8 +33,8 @@ export function MessagesPageClient({
     return bTime - aTime;
   });
   const getTypeLabel = (type: string) => {
-    if (type === "CLEANING") return t("serviceCleaningName");
-    if (type === "KEY_HANDLING") return t("serviceKeyHandlingName");
+    const key = getServiceTypeTranslationKey(type);
+    if (key) return t(key);
     return type;
   };
   const getConversationParty = (conversation: Conversation) => {

@@ -10,6 +10,7 @@ import { StatusBadge } from "@/components/status-badge";
 import { useLanguage } from "@/lib/language-context";
 import { playNotificationSound } from "@/lib/play-notification-sound";
 import { toUserErrorMessage } from "@/lib/client-error";
+import { getServiceTypeTranslationKey, isGuestCountServiceType, isValidServiceType, ORDERABLE_SERVICE_TYPES } from "@/lib/service-types";
 
 type User = { id: string; name: string; role: "ADMIN" | "UTLEIER" | "TJENESTE" };
 type Comment = { id: string; text: string; user: User };
@@ -207,8 +208,8 @@ export function OrderDetailClient({
     }
     return t(key);
   }, [lang, order.guestCount, t]);
-  const orderTypeLabel =
-    order.type === "CLEANING" ? t("serviceCleaningName") : order.type === "KEY_HANDLING" ? t("serviceKeyHandlingName") : order.type;
+  const orderTypeKey = getServiceTypeTranslationKey(order.type);
+  const orderTypeLabel = orderTypeKey ? t(orderTypeKey) : order.type;
   const assignmentStatusLabel =
     assignmentStatus === "PENDING_WORKER_ACCEPTANCE"
       ? t("assignmentPendingWorker")
@@ -761,7 +762,7 @@ export function OrderDetailClient({
       toast.error(t("addressDateRequired"));
       return;
     }
-    if (type !== "CLEANING" && type !== "KEY_HANDLING") {
+    if (!isValidServiceType(type)) {
       toast.error(t("invalidServiceType"));
       return;
     }
@@ -785,7 +786,7 @@ export function OrderDetailClient({
         type,
         address,
         date: isoDate,
-        guestCount,
+        guestCount: isGuestCountServiceType(type) ? guestCount : null,
         note: note.length ? note : "",
       }),
     });
@@ -1113,8 +1114,14 @@ export function OrderDetailClient({
                   onChange={(e) => setEditValues((prev) => ({ ...prev, type: e.target.value }))}
                   required
                 >
-                  <option value="CLEANING">CLEANING</option>
-                  <option value="KEY_HANDLING">KEY_HANDLING</option>
+                  {ORDERABLE_SERVICE_TYPES.map((serviceType) => {
+                    const key = getServiceTypeTranslationKey(serviceType);
+                    return (
+                      <option key={serviceType} value={serviceType}>
+                        {key ? t(key) : serviceType}
+                      </option>
+                    );
+                  })}
                 </select>
                 <input
                   className="input"
@@ -1132,22 +1139,24 @@ export function OrderDetailClient({
                   onChange={(e) => setEditValues((prev) => ({ ...prev, date: e.target.value }))}
                   required
                 />
-                <div className="rounded-xl border-2 border-teal-300 bg-teal-50 p-2">
-                  <label className="mb-1 block text-sm font-bold text-slate-900">{t("guestCount")}</label>
-                  <span className="mb-2 inline-flex rounded-full bg-amber-200 px-2 py-0.5 text-[11px] font-bold text-amber-900">
-                    {t("importantField")}
-                  </span>
-                  <input
-                    className="input border-amber-400 bg-white text-sm font-semibold"
-                    type="number"
-                    min={1}
-                    max={50}
-                    name="guestCount"
-                    value={editValues.guestCount}
-                    onChange={(e) => setEditValues((prev) => ({ ...prev, guestCount: e.target.value }))}
-                    placeholder={t("guestCountPlaceholder")}
-                  />
-                </div>
+                {isGuestCountServiceType(editValues.type) ? (
+                  <div className="rounded-xl border-2 border-teal-300 bg-teal-50 p-2">
+                    <label className="mb-1 block text-sm font-bold text-slate-900">{t("guestCount")}</label>
+                    <span className="mb-2 inline-flex rounded-full bg-amber-200 px-2 py-0.5 text-[11px] font-bold text-amber-900">
+                      {t("importantField")}
+                    </span>
+                    <input
+                      className="input border-amber-400 bg-white text-sm font-semibold"
+                      type="number"
+                      min={1}
+                      max={50}
+                      name="guestCount"
+                      value={editValues.guestCount}
+                      onChange={(e) => setEditValues((prev) => ({ ...prev, guestCount: e.target.value }))}
+                      placeholder={t("guestCountPlaceholder")}
+                    />
+                  </div>
+                ) : null}
                 <textarea
                   className="input"
                   name="note"
@@ -1166,7 +1175,7 @@ export function OrderDetailClient({
             </button>
           </div>
         )}
-        {order.type === "CLEANING" && order.guestCount ? (
+        {isGuestCountServiceType(order.type) && order.guestCount ? (
           <div className="mt-3 rounded bg-slate-50 p-3 text-sm">
             <div
               className="mb-2 flex max-w-full items-center justify-between rounded-md border-2 border-amber-400 bg-amber-50 shadow-sm ring-1 ring-amber-200"

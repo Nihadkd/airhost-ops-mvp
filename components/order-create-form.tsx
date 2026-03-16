@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import toast from "react-hot-toast";
 import { useLanguage } from "@/lib/language-context";
 import { toUserErrorMessage } from "@/lib/client-error";
+import { getServiceTypeTranslationKey, isGuestCountServiceType, ORDERABLE_SERVICE_TYPES } from "@/lib/service-types";
 
 type LandlordOption = {
   id: string;
@@ -28,6 +29,7 @@ export function OrderCreateForm({
   const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [landlordQuery, setLandlordQuery] = useState("");
+  const [selectedType, setSelectedType] = useState("CLEANING");
   const { t } = useLanguage();
   const landlordChoices = landlordOptions.map((landlord) => ({
     id: landlord.id,
@@ -102,7 +104,9 @@ export function OrderCreateForm({
       date: new Date(rawDate).toISOString(),
       deadlineAt: deadlineDate.toISOString(),
       note: String(formData.get("note") || ""),
-      guestCount: Number(formData.get("guestCount") || 0) || undefined,
+      guestCount: isGuestCountServiceType(String(formData.get("type")))
+        ? Number(formData.get("guestCount") || 0) || undefined
+        : undefined,
       landlordId: selectedLandlordId,
     };
 
@@ -132,9 +136,21 @@ export function OrderCreateForm({
       <h1 className="text-xl font-bold">{t("newOrder")}</h1>
       <label className="block">
         <span className="mb-1 block text-sm text-slate-600">{t("serviceLabel")}</span>
-        <select name="type" className="input" required>
-          <option value="CLEANING">{t("serviceCleaningName")}</option>
-          <option value="KEY_HANDLING">{t("serviceKeyHandlingName")}</option>
+        <select
+          name="type"
+          className="input"
+          required
+          value={selectedType}
+          onChange={(e) => setSelectedType(e.target.value)}
+        >
+          {ORDERABLE_SERVICE_TYPES.map((serviceType) => {
+            const key = getServiceTypeTranslationKey(serviceType);
+            return (
+              <option key={serviceType} value={serviceType}>
+                {key ? t(key) : serviceType}
+              </option>
+            );
+          })}
         </select>
       </label>
       {canChooseLandlord && (
@@ -189,23 +205,25 @@ export function OrderCreateForm({
         </div>
         <span className="mt-1 block text-xs text-slate-500">{t("deadlineAfterStartHint")}</span>
       </label>
-      <label className="block">
-        <span className="mb-1 block text-sm font-bold text-slate-900">{t("guestCount")}</span>
-        <div className="inline-flex w-[150px] flex-col rounded-md border-2 border-amber-400 bg-amber-50 p-1.5 shadow-sm ring-1 ring-amber-200">
-          <span className="mb-1 inline-flex rounded-full bg-amber-200 px-1.5 py-0.5 text-[9px] font-bold text-amber-900">
-            {t("importantField")}
-          </span>
-          <input
-            type="number"
-            min={1}
-            max={50}
-            name="guestCount"
-            className="input h-8 w-[92px] border-amber-400 bg-white text-xs font-semibold"
-            required
-          />
-          <span className="mt-1 block text-xs font-semibold text-amber-900">{t("guestCountHint")}</span>
-        </div>
-      </label>
+      {isGuestCountServiceType(selectedType) ? (
+        <label className="block">
+          <span className="mb-1 block text-sm font-bold text-slate-900">{t("guestCount")}</span>
+          <div className="inline-flex w-[150px] flex-col rounded-md border-2 border-amber-400 bg-amber-50 p-1.5 shadow-sm ring-1 ring-amber-200">
+            <span className="mb-1 inline-flex rounded-full bg-amber-200 px-1.5 py-0.5 text-[9px] font-bold text-amber-900">
+              {t("importantField")}
+            </span>
+            <input
+              type="number"
+              min={1}
+              max={50}
+              name="guestCount"
+              className="input h-8 w-[92px] border-amber-400 bg-white text-xs font-semibold"
+              required
+            />
+            <span className="mt-1 block text-xs font-semibold text-amber-900">{t("guestCountHint")}</span>
+          </div>
+        </label>
+      ) : null}
       <label className="block">
         <span className="mb-1 block text-sm text-slate-600">{t("addressLabel")}</span>
         <input type="text" name="address" className="input" required />

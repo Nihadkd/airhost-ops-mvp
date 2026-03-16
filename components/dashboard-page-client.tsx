@@ -6,6 +6,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { PaymentBadge } from "@/components/payment-badge";
 import { StatusBadge } from "@/components/status-badge";
 import { useLanguage } from "@/lib/language-context";
+import { getServiceTypeTranslationKey } from "@/lib/service-types";
 
 type Me = {
   effectiveRole: "ADMIN" | "UTLEIER" | "TJENESTE";
@@ -94,8 +95,8 @@ export function DashboardPageClient() {
   const mapUrl = (address: string) =>
     `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(address)}`;
   const getTypeLabel = useCallback((type: string) => {
-    if (type === "CLEANING") return t("serviceCleaningName");
-    if (type === "KEY_HANDLING") return t("serviceKeyHandlingName");
+    const key = getServiceTypeTranslationKey(type);
+    if (key) return t(key);
     return type;
   }, [t]);
 

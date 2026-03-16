@@ -21,7 +21,14 @@ enum ProfileMode {
 
 enum ServiceType {
   CLEANING
+  MOVING_CARRYING
+  GARDEN_WORK
+  DELIVERY_TRANSPORT
+  SMALL_REPAIRS
+  PET_CARE
+  TECHNICAL_HELP
   KEY_HANDLING
+  OTHER
 }
 
 enum OrderStatus {
