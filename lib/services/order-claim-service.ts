@@ -3,13 +3,11 @@ import { ApiRouteError } from "@/lib/api";
 import {
   acquireAddressClaimLock,
   findClaimableOrderById,
-  findEarlierOpenOrderOnAddress,
   markOrderAsClaimed,
   withOrderClaimTransaction,
   type ClaimableOrder,
 } from "@/lib/repositories/service-order-repository";
 
-const CLAIM_SEQUENCE_BLOCKED_MESSAGE = "Du mÃ¥ fullfÃ¸re tidligere oppdrag pÃ¥ denne adressen fÃ¸r du kan starte dette.";
 const MAX_CLAIM_RETRIES = 2;
 
 type ClaimOrderInput = {
@@ -56,18 +54,6 @@ async function runClaimTransaction(input: ClaimOrderInput): Promise<ClaimOrderTr
 
     if (lockedOrder.status !== "PENDING" || lockedOrder.assignedToId !== null || lockedOrder.assignmentStatus !== "UNASSIGNED") {
       throw new ApiRouteError(409, "Order already assigned", { code: "ORDER_ALREADY_ASSIGNED" });
-    }
-
-    const blockingOrder = await findEarlierOpenOrderOnAddress(tx, lockedOrder);
-    if (blockingOrder) {
-      throw new ApiRouteError(409, CLAIM_SEQUENCE_BLOCKED_MESSAGE, {
-        code: "ADDRESS_SEQUENCE_BLOCKED",
-        details: {
-          blockedByOrderId: blockingOrder.id,
-          blockedByOrderNumber: blockingOrder.orderNumber,
-          address: blockingOrder.address,
-        },
-      });
     }
 
     const claimResult = await markOrderAsClaimed(tx, input.orderId, input.workerId);

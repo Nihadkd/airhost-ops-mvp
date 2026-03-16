@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { requireAuth } from "@/lib/rbac";
 import { handleApiError } from "@/lib/api";
 import { derivePaymentStatus } from "@/lib/payments/order-payment";
+import { getStartAvailabilityForWorker } from "@/lib/services/order-start-service";
 
 type DashboardSort = "NEWEST_OLDEST" | "OLDEST_NEWEST" | "NEAREST";
 type DashboardView = "active" | "my" | "completed";
@@ -40,7 +41,7 @@ export async function GET(req: Request) {
       isAdmin
         ? view === "completed"
           ? { status: OrderStatus.COMPLETED }
-        : view === "my"
+          : view === "my"
             ? { status: myStatusWhere }
             : { status: OrderStatus.PENDING, assignedToId: null }
         : session.user.role === "UTLEIER"
@@ -113,26 +114,35 @@ export async function GET(req: Request) {
         take: pageSize,
       });
 
-      return rows.map((row) => {
+      return Promise.all(rows.map(async (row) => {
         const receipt = "receipt" in row ? row.receipt : null;
+        const startAvailability =
+          session.user.role === "TJENESTE" &&
+          view === "my" &&
+          row.assignedToId === session.user.id &&
+          row.status === OrderStatus.PENDING
+            ? await getStartAvailabilityForWorker(row.id, session.user.id)
+            : null;
         return {
           id: row.id,
           orderNumber: row.orderNumber,
           type: row.type,
           address: row.address,
           status: row.status,
+          assignmentStatus: row.assignmentStatus,
           date: row.date,
           createdAt: row.createdAt,
           updatedAt: row.updatedAt,
           assignedToId: row.assignedToId,
           landlord: row.landlord,
           assignedTo: row.assignedTo,
+          canStart: startAvailability?.canStart ?? false,
           paymentStatus: derivePaymentStatus({
             paymentIntent: row.paymentIntent,
             receiptAmountNok: receipt?.amountNok ?? null,
           }),
         };
-      });
+      }));
     };
 
     const ordersPromise = loadOrders(true).catch(async (receiptError) => {

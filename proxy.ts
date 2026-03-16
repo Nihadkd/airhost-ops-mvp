@@ -30,11 +30,19 @@ export default function proxy(request: NextRequest) {
   }
 
   const response = NextResponse.next();
+  const isDocumentRequest =
+    request.method === "GET" &&
+    (request.headers.get("sec-fetch-dest") === "document" ||
+      request.headers.get("accept")?.includes("text/html"));
+
   response.headers.set("Referrer-Policy", "strict-origin-when-cross-origin");
   response.headers.set("X-Content-Type-Options", "nosniff");
   response.headers.set("X-Frame-Options", "DENY");
   response.headers.set("Permissions-Policy", "camera=(), microphone=(), geolocation=(), payment=()");
   response.headers.set("Content-Security-Policy", buildContentSecurityPolicy());
+  if (isDocumentRequest) {
+    response.headers.set("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0");
+  }
 
   if (process.env.NODE_ENV === "production") {
     response.headers.set(

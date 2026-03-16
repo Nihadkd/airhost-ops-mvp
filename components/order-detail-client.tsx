@@ -114,6 +114,7 @@ export function OrderDetailClient({
   const [chatHighlighted, setChatHighlighted] = useState(false);
   const [focusedMessageId, setFocusedMessageId] = useState<string | null>(null);
   const [newMessageNotice, setNewMessageNotice] = useState(false);
+  const [newMessageNoticeDragX, setNewMessageNoticeDragX] = useState(0);
   const [editValues, setEditValues] = useState({
     type: initialOrder.type,
     address: initialOrder.address,
@@ -127,6 +128,8 @@ export function OrderDetailClient({
   const chatScrollRef = useRef<HTMLDivElement | null>(null);
   const chatHighlightTimerRef = useRef<number | null>(null);
   const newMessageNoticeTimerRef = useRef<number | null>(null);
+  const newMessageNoticeRef = useRef<HTMLDivElement | null>(null);
+  const newMessageNoticeDragStartRef = useRef<number | null>(null);
   const latestIncomingMessageIdRef = useRef<string>(
     [...(initialOrder.messages ?? [])].reverse().find((msg) => msg.senderId !== currentUserId)?.id ?? "",
   );
@@ -226,6 +229,34 @@ export function OrderDetailClient({
     setFullscreenImageUrl(null);
     setFullscreenZoom(1);
   }, []);
+  const dismissNewMessageNotice = useCallback(() => {
+    setNewMessageNotice(false);
+    setNewMessageNoticeDragX(0);
+    if (newMessageNoticeTimerRef.current) {
+      window.clearTimeout(newMessageNoticeTimerRef.current);
+      newMessageNoticeTimerRef.current = null;
+    }
+  }, []);
+  const beginNewMessageNoticeDrag = useCallback((clientX: number) => {
+    newMessageNoticeDragStartRef.current = clientX;
+  }, []);
+  const updateNewMessageNoticeDrag = useCallback((clientX: number) => {
+    if (newMessageNoticeDragStartRef.current === null) return;
+    setNewMessageNoticeDragX(clientX - newMessageNoticeDragStartRef.current);
+  }, []);
+  const endNewMessageNoticeDrag = useCallback((finalClientX?: number) => {
+    if (newMessageNoticeDragStartRef.current === null) return;
+    const delta =
+      typeof finalClientX === "number"
+        ? finalClientX - newMessageNoticeDragStartRef.current
+        : newMessageNoticeDragX;
+    if (Math.abs(delta) >= 100) {
+      dismissNewMessageNotice();
+    } else {
+      setNewMessageNoticeDragX(0);
+    }
+    newMessageNoticeDragStartRef.current = null;
+  }, [dismissNewMessageNotice, newMessageNoticeDragX]);
 
   useEffect(() => {
     const valid = new Set(order.images.map((img) => img.id));
@@ -295,17 +326,18 @@ export function OrderDetailClient({
         if (latestIncoming && latestIncoming.id !== latestIncomingMessageIdRef.current) {
           latestIncomingMessageIdRef.current = latestIncoming.id;
 
-          if (opts?.playAlert !== false && typeof document !== "undefined" && document.visibilityState === "visible") {
-            playNotificationSound();
-            setChatHighlighted(true);
-            setNewMessageNotice(true);
-            if (chatHighlightTimerRef.current) window.clearTimeout(chatHighlightTimerRef.current);
-            chatHighlightTimerRef.current = window.setTimeout(() => setChatHighlighted(false), 4500);
-            if (newMessageNoticeTimerRef.current) window.clearTimeout(newMessageNoticeTimerRef.current);
-            newMessageNoticeTimerRef.current = window.setTimeout(() => setNewMessageNotice(false), 10000);
+            if (opts?.playAlert !== false && typeof document !== "undefined" && document.visibilityState === "visible") {
+              playNotificationSound();
+              setChatHighlighted(true);
+              setNewMessageNotice(true);
+              setNewMessageNoticeDragX(0);
+              if (chatHighlightTimerRef.current) window.clearTimeout(chatHighlightTimerRef.current);
+              chatHighlightTimerRef.current = window.setTimeout(() => setChatHighlighted(false), 4500);
+              if (newMessageNoticeTimerRef.current) window.clearTimeout(newMessageNoticeTimerRef.current);
+              newMessageNoticeTimerRef.current = window.setTimeout(() => dismissNewMessageNotice(), 5000);
+            }
           }
         }
-      }
     } finally {
       refreshMessagesBusyRef.current = false;
     }
@@ -367,7 +399,52 @@ export function OrderDetailClient({
       if (chatHighlightTimerRef.current) window.clearTimeout(chatHighlightTimerRef.current);
       if (newMessageNoticeTimerRef.current) window.clearTimeout(newMessageNoticeTimerRef.current);
     };
-  }, []);
+  }, [dismissNewMessageNotice]);
+
+  useEffect(() => {
+    const element = newMessageNoticeRef.current;
+    if (!element) return;
+
+    const onMouseDown = (event: MouseEvent) => {
+      event.preventDefault();
+      beginNewMessageNoticeDrag(event.clientX);
+    };
+    const onMouseMove = (event: MouseEvent) => {
+      if (newMessageNoticeDragStartRef.current === null) return;
+      updateNewMessageNoticeDrag(event.clientX);
+    };
+    const onMouseUp = (event: MouseEvent) => {
+      if (newMessageNoticeDragStartRef.current === null) return;
+      endNewMessageNoticeDrag(event.clientX);
+    };
+    const onTouchStart = (event: TouchEvent) => {
+      beginNewMessageNoticeDrag(event.touches[0]?.clientX ?? 0);
+    };
+    const onTouchMove = (event: TouchEvent) => {
+      if (newMessageNoticeDragStartRef.current === null) return;
+      updateNewMessageNoticeDrag(event.touches[0]?.clientX ?? 0);
+    };
+    const onTouchEnd = (event: TouchEvent) => {
+      if (newMessageNoticeDragStartRef.current === null) return;
+      endNewMessageNoticeDrag(event.changedTouches[0]?.clientX ?? undefined);
+    };
+
+    element.addEventListener("mousedown", onMouseDown);
+    window.addEventListener("mousemove", onMouseMove);
+    window.addEventListener("mouseup", onMouseUp);
+    element.addEventListener("touchstart", onTouchStart, { passive: true });
+    window.addEventListener("touchmove", onTouchMove, { passive: true });
+    window.addEventListener("touchend", onTouchEnd);
+
+    return () => {
+      element.removeEventListener("mousedown", onMouseDown);
+      window.removeEventListener("mousemove", onMouseMove);
+      window.removeEventListener("mouseup", onMouseUp);
+      element.removeEventListener("touchstart", onTouchStart);
+      window.removeEventListener("touchmove", onTouchMove);
+      window.removeEventListener("touchend", onTouchEnd);
+    };
+  }, [beginNewMessageNoticeDrag, endNewMessageNoticeDrag, newMessageNotice, updateNewMessageNoticeDrag]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -654,7 +731,7 @@ export function OrderDetailClient({
       return;
     }
 
-    setNewMessageNotice(false);
+    dismissNewMessageNotice();
     await refreshMessages({ playAlert: false });
   };
 
@@ -835,15 +912,29 @@ export function OrderDetailClient({
 
   const chatContent = (
     <>
-      <div className="mb-3 flex items-center justify-between">
-        <h2 className="text-lg font-semibold">{t("privateChat")}</h2>
-        <span className="text-xs text-slate-500">{t("privateChatHint")}</span>
-      </div>
-      {newMessageNotice && (
-        <div className="mb-2 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm font-semibold text-amber-900">
-          {t("newMessageNotice")}
+        <div className="mb-3 flex items-center justify-between">
+          <h2 className="text-lg font-semibold">{t("privateChat")}</h2>
+          <span className="text-xs text-slate-500">{t("privateChatHint")}</span>
         </div>
-      )}
+        {newMessageNotice && (
+          <div
+            data-testid="new-message-notice"
+            ref={newMessageNoticeRef}
+            className="mb-2 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm font-semibold text-amber-900"
+            style={{
+              transform: `translateX(${newMessageNoticeDragX}px)`,
+              opacity: Math.max(0.35, 1 - Math.abs(newMessageNoticeDragX) / 180),
+              transition:
+                newMessageNoticeDragStartRef.current === null
+                  ? "transform 0.18s ease, opacity 0.18s ease"
+                  : "none",
+              touchAction: "none",
+              userSelect: "none",
+            }}
+          >
+            {t("newMessageNotice")}
+          </div>
+        )}
       <div
         ref={chatScrollRef}
         className={`max-h-72 space-y-1.5 overflow-y-auto rounded border p-2 transition-colors ${
@@ -1251,13 +1342,23 @@ export function OrderDetailClient({
         )}
 
         {(role === "ADMIN" || isLandlordParticipant) && isAwaitingLandlordApproval && order.assignedTo ? (
-          <div className="mt-4 flex flex-wrap gap-2">
-            <button className="btn btn-primary" type="button" disabled={statusSaving} onClick={() => void approveAssignment()}>
-              {statusSaving ? t("saving") : t("approveAssignmentAction")}
-            </button>
-            <button className="btn btn-secondary" type="button" disabled={assignSaving} onClick={() => void cancelAssignment()}>
-              {assignSaving ? t("saving") : t("cancelAssignmentAction")}
-            </button>
+          <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-3">
+            <div className="mb-3 flex flex-wrap items-center gap-2 text-sm">
+              <span className="font-semibold text-slate-900">{order.assignedTo.name}</span>
+              {renderWorkerRating(order.assignedTo.averageRating, order.assignedTo.reviewCount) ?? (
+                <span className="rounded-full bg-slate-200 px-2 py-0.5 text-xs font-semibold text-slate-700">
+                  {t("noReviewsYet")}
+                </span>
+              )}
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <button className="btn btn-primary" type="button" disabled={statusSaving} onClick={() => void approveAssignment()}>
+                {statusSaving ? t("saving") : t("approveAssignmentAction")}
+              </button>
+              <button className="btn btn-secondary" type="button" disabled={assignSaving} onClick={() => void cancelAssignment()}>
+                {assignSaving ? t("saving") : t("cancelAssignmentAction")}
+              </button>
+            </div>
           </div>
         ) : null}
 

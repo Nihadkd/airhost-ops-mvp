@@ -20,6 +20,8 @@ const codeToKey: Record<string, string> = {
   PAYMENT_ALREADY_COMPLETED: "paymentStatusPaid",
   ORDER_NOT_STARTED: "orderStartRequired",
   WORKER_SEQUENCE_BLOCKED: "workerSequenceBlocked",
+  ADDRESS_SEQUENCE_BLOCKED: "workerSequenceBlocked",
+  ORDER_ALREADY_ASSIGNED: "cannotTakeJob",
 };
 
 const errorToKey: Record<string, string> = {

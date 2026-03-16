@@ -402,15 +402,6 @@ describe("/api/orders", () => {
       }),
     );
     expect(vi.mocked(prisma.$executeRaw)).toHaveBeenCalledTimes(1);
-    expect(vi.mocked(prisma.serviceOrder.findFirst)).toHaveBeenCalledWith(
-      expect.objectContaining({
-        where: expect.objectContaining({
-          address: "Street 1",
-          status: { in: ["PENDING", "IN_PROGRESS"] },
-        }),
-        orderBy: [{ date: "asc" }, { orderNumber: "asc" }],
-      }),
-    );
   });
 
   it("PUT /api/orders/[id]/claim blocks second worker from taking same job", async () => {
@@ -429,7 +420,7 @@ describe("/api/orders", () => {
     expect(res.status).toBe(409);
   });
 
-  it("PUT /api/orders/[id]/claim blocks later order when earlier address order is still open", async () => {
+  it("PUT /api/orders/[id]/claim allows worker to claim later order on the same address", async () => {
     vi.mocked(requireAuth).mockResolvedValue({ user: { id: "t2", name: "Worker 2", role: "TJENESTE" } } as never);
     vi.mocked(prisma.serviceOrder.findUnique).mockResolvedValue({
       id: "o2",
@@ -441,26 +432,21 @@ describe("/api/orders", () => {
       assignmentStatus: "UNASSIGNED",
       status: "PENDING",
     } as never);
-    vi.mocked(prisma.serviceOrder.findFirst).mockResolvedValue({
-      id: "o1",
-      orderNumber: 101,
-      address: "Street 1",
-      date: new Date("2026-03-01T10:00:00.000Z"),
-      landlordId: "l1",
-      assignedToId: null,
-      assignmentStatus: "UNASSIGNED",
-      status: "PENDING",
-    } as never);
+    vi.mocked(prisma.serviceOrder.updateMany).mockResolvedValue({ count: 1 } as never);
+    vi.mocked(prisma.user.findUnique).mockResolvedValue({ id: "l1", email: "l@example.com", name: "Landlord" } as never);
 
     const res = await claimOrder(new Request("http://localhost", { method: "PUT" }), { params: Promise.resolve({ id: "o2" }) });
-    const data = await res.json();
-    expect(res.status).toBe(409);
-    expect(data).toEqual(
+    expect(res.status).toBe(200);
+    expect(vi.mocked(prisma.serviceOrder.updateMany)).toHaveBeenCalledWith(
       expect.objectContaining({
-        code: "ADDRESS_SEQUENCE_BLOCKED",
+        where: expect.objectContaining({
+          id: "o2",
+          assignedToId: null,
+          assignmentStatus: "UNASSIGNED",
+          status: "PENDING",
+        }),
       }),
     );
-    expect(vi.mocked(prisma.serviceOrder.updateMany)).not.toHaveBeenCalled();
   });
 
   it("PUT /api/orders/[id]/assign sends sms to worker", async () => {
