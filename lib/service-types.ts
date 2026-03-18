@@ -38,7 +38,11 @@ export function getServiceTypeTranslationKey(type: string) {
 }
 
 export function isGuestCountServiceType(type: string) {
-  return type === ServiceType.CLEANING;
+  return type === ServiceType.KEY_HANDLING;
+}
+
+export function isChecklistServiceType(type: string) {
+  return type === ServiceType.KEY_HANDLING;
 }
 
 export function isValidServiceType(type: string): type is ServiceType {

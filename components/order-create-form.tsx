@@ -96,6 +96,17 @@ export function OrderCreateForm({
       toast.error(t("deadlineAfterStart"));
       return;
     }
+    const note = String(formData.get("note") || "").trim();
+    const details = String(formData.get("details") || "").trim();
+    const requiresJobSummary = !isGuestCountServiceType(String(formData.get("type")));
+    if (requiresJobSummary && !note) {
+      toast.error(t("jobSummaryRequired"));
+      return;
+    }
+    if (!details) {
+      toast.error(t("jobDetailsRequired"));
+      return;
+    }
 
     setLoading(true);
     const payload = {
@@ -103,7 +114,8 @@ export function OrderCreateForm({
       address: String(formData.get("address")),
       date: new Date(rawDate).toISOString(),
       deadlineAt: deadlineDate.toISOString(),
-      note: String(formData.get("note") || ""),
+      note,
+      details,
       guestCount: isGuestCountServiceType(String(formData.get("type")))
         ? Number(formData.get("guestCount") || 0) || undefined
         : undefined,
@@ -152,6 +164,28 @@ export function OrderCreateForm({
             );
           })}
         </select>
+      </label>
+      <label className="block">
+        <span className="mb-1 block text-sm text-slate-600">{t("jobSummaryLabel")}</span>
+        <textarea
+          name="note"
+          className="input min-h-24"
+          placeholder={t("jobSummaryPlaceholder")}
+          required={!isGuestCountServiceType(selectedType)}
+        />
+        {!isGuestCountServiceType(selectedType) ? (
+          <span className="mt-1 block text-xs font-semibold text-slate-500">{t("jobSummaryHint")}</span>
+        ) : null}
+      </label>
+      <label className="block">
+        <span className="mb-1 block text-sm text-slate-600">{t("jobDetailsLabel")}</span>
+        <textarea
+          name="details"
+          className="input min-h-32"
+          placeholder={t("jobDetailsPlaceholder")}
+          required
+        />
+        <span className="mt-1 block text-xs font-semibold text-slate-500">{t("jobDetailsHint")}</span>
       </label>
       {canChooseLandlord && (
         <label className="block">
@@ -227,10 +261,6 @@ export function OrderCreateForm({
       <label className="block">
         <span className="mb-1 block text-sm text-slate-600">{t("addressLabel")}</span>
         <input type="text" name="address" className="input" required />
-      </label>
-      <label className="block">
-        <span className="mb-1 block text-sm text-slate-600">{t("commentLabel")}</span>
-        <textarea name="note" className="input min-h-28" />
       </label>
       <button disabled={loading} className="btn btn-primary" type="submit">
         {loading ? t("saving") : t("createOrderAction")}

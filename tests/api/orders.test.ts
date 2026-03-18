@@ -54,12 +54,87 @@ describe("/api/orders", () => {
 
     const req = new Request("http://localhost/api/orders", {
       method: "POST",
-      body: JSON.stringify({ type: "CLEANING", address: "Street 1", date: validHalfHourIso, deadlineAt: validDeadlineHalfHourIso, guestCount: 2 }),
+      body: JSON.stringify({
+        type: "CLEANING",
+        address: "Street 1",
+        date: validHalfHourIso,
+        deadlineAt: validDeadlineHalfHourIso,
+        guestCount: 2,
+        note: "Need help cleaning before inspection",
+        details: "Clean the apartment thoroughly before inspection, including floors, bathroom and kitchen.",
+      }),
       headers: { "Content-Type": "application/json" },
     });
 
     const res = await createOrder(req);
     expect(res.status).toBe(201);
+  });
+
+  it("POST creates non-Airbnb order without guest count when summary is provided", async () => {
+    vi.mocked(requireAuth).mockResolvedValue({ user: { id: "l1", role: "UTLEIER" } } as never);
+    vi.mocked(prisma.serviceOrder.findFirst).mockResolvedValue(null as never);
+    vi.mocked(prisma.serviceOrder.create).mockResolvedValue({ id: "o1" } as never);
+
+    const req = new Request("http://localhost/api/orders", {
+      method: "POST",
+      body: JSON.stringify({
+        type: "CLEANING",
+        address: "Street 1",
+        date: validHalfHourIso,
+        deadlineAt: validDeadlineHalfHourIso,
+        note: "Wipe surfaces and floors",
+        details: "Wipe all surfaces, vacuum the living room, and mop the kitchen floor.",
+      }),
+      headers: { "Content-Type": "application/json" },
+    });
+
+    const res = await createOrder(req);
+    expect(res.status).toBe(201);
+  });
+
+  it("POST requires a short summary for non-Airbnb jobs", async () => {
+    vi.mocked(requireAuth).mockResolvedValue({ user: { id: "l1", role: "UTLEIER" } } as never);
+
+    const req = new Request("http://localhost/api/orders", {
+      method: "POST",
+      body: JSON.stringify({ type: "CLEANING", address: "Street 1", date: validHalfHourIso, deadlineAt: validDeadlineHalfHourIso }),
+      headers: { "Content-Type": "application/json" },
+    });
+
+    const res = await createOrder(req);
+    expect(res.status).toBe(400);
+  });
+
+  it("POST requires detailed job text", async () => {
+    vi.mocked(requireAuth).mockResolvedValue({ user: { id: "l1", role: "UTLEIER" } } as never);
+
+    const req = new Request("http://localhost/api/orders", {
+      method: "POST",
+      body: JSON.stringify({ type: "KEY_HANDLING", address: "Street 1", date: validHalfHourIso, deadlineAt: validDeadlineHalfHourIso, guestCount: 2 }),
+      headers: { "Content-Type": "application/json" },
+    });
+
+    const res = await createOrder(req);
+    expect(res.status).toBe(400);
+  });
+
+  it("POST requires guest count for Airbnb jobs", async () => {
+    vi.mocked(requireAuth).mockResolvedValue({ user: { id: "l1", role: "UTLEIER" } } as never);
+
+    const req = new Request("http://localhost/api/orders", {
+      method: "POST",
+      body: JSON.stringify({
+        type: "KEY_HANDLING",
+        address: "Street 1",
+        date: validHalfHourIso,
+        deadlineAt: validDeadlineHalfHourIso,
+        details: "Handle check-in, check-out, key handover and prepare the apartment for the next guest.",
+      }),
+      headers: { "Content-Type": "application/json" },
+    });
+
+    const res = await createOrder(req);
+    expect(res.status).toBe(400);
   });
 
   it("POST rejects order dates that are not on the hour or half hour", async () => {
@@ -73,6 +148,8 @@ describe("/api/orders", () => {
         date: "2026-03-01T10:15:00.000Z",
         deadlineAt: validDeadlineHalfHourIso,
         guestCount: 2,
+        note: "Uneven time test",
+        details: "Detailed text for uneven time test",
       }),
       headers: { "Content-Type": "application/json" },
     });
@@ -92,6 +169,8 @@ describe("/api/orders", () => {
         date: validHalfHourIso,
         deadlineAt: "2026-03-01T10:00:00.000Z",
         guestCount: 2,
+        note: "Deadline before start",
+        details: "Detailed text for deadline validation",
       }),
       headers: { "Content-Type": "application/json" },
     });
@@ -120,6 +199,8 @@ describe("/api/orders", () => {
         date: validHalfHourIso,
         deadlineAt: validDeadlineHalfHourIso,
         guestCount: 2,
+        note: "Clean and prepare for tenant",
+        details: "Clean and prepare the apartment before the tenant arrives, including fresh linens.",
         landlordId: "l1",
       }),
       headers: { "Content-Type": "application/json" },

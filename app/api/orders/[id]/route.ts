@@ -96,6 +96,9 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
     if (parsed.data.note !== undefined && (isAdminAccount || session.user.role === "ADMIN" || session.user.role === "UTLEIER")) {
       data.note = withDeadlineMetadata(parsed.data.note, extractDeadlineAt(access.order.note));
     }
+    if (parsed.data.details !== undefined && (isAdminAccount || session.user.role === "ADMIN" || session.user.role === "UTLEIER")) {
+      data.details = parsed.data.details.trim();
+    }
     if (parsed.data.guestCount !== undefined && (isAdminAccount || session.user.role === "ADMIN" || session.user.role === "UTLEIER")) {
       data.guestCount = parsed.data.guestCount;
     }
@@ -118,7 +121,7 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
               code: "ASSIGNMENT_NOT_CONFIRMED",
             });
           }
-          return apiError(409, "Du mÃ¥ fullfÃ¸re tidligere oppdrag fÃ¸r du kan starte dette.", {
+          return apiError(409, "Du må fullføre tidligere oppdrag før du kan starte dette.", {
             code: "WORKER_SEQUENCE_BLOCKED",
           });
         }
@@ -133,7 +136,7 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
     const updated = await prisma.serviceOrder.update({ where: { id }, data });
 
     if (session.user.role === "TJENESTE" && parsed.data.status === "COMPLETED") {
-      const doneMessage = `Oppdrag #${access.order.orderNumber} er utfÃ¸rt og klart for betaling.`;
+      const doneMessage = `Oppdrag #${access.order.orderNumber} er utført og klart for betaling.`;
       const landlord = await prisma.user.findUnique({
         where: { id: access.order.landlordId },
         select: { id: true, email: true, name: true },
@@ -149,7 +152,7 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
           message: doneMessage,
           targetUrl: `/orders/${id}`,
           push: {
-            title: "Oppdrag utfÃ¸rt",
+            title: "Oppdrag utført",
             body: doneMessage,
             data: { orderId: id, type: "order_completed", path: `/orders/${id}` },
           },

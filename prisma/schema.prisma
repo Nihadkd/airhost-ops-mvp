@@ -94,6 +94,7 @@ model ServiceOrder {
   status        OrderStatus  @default(PENDING)
   assignmentStatus AssignmentStatus @default(UNASSIGNED)
   note          String?
+  details       String?
   guestCount    Int?
   completionNote String?
   completionChecklist Json?

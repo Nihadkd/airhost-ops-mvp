@@ -10,7 +10,13 @@ import { StatusBadge } from "@/components/status-badge";
 import { useLanguage } from "@/lib/language-context";
 import { playNotificationSound } from "@/lib/play-notification-sound";
 import { toUserErrorMessage } from "@/lib/client-error";
-import { getServiceTypeTranslationKey, isGuestCountServiceType, isValidServiceType, ORDERABLE_SERVICE_TYPES } from "@/lib/service-types";
+import {
+  getServiceTypeTranslationKey,
+  isChecklistServiceType,
+  isGuestCountServiceType,
+  isValidServiceType,
+  ORDERABLE_SERVICE_TYPES,
+} from "@/lib/service-types";
 
 type User = { id: string; name: string; role: "ADMIN" | "UTLEIER" | "TJENESTE" };
 type Comment = { id: string; text: string; user: User };
@@ -170,6 +176,7 @@ export function OrderDetailClient({
   const canWorkerSendMessages = !isReadOnlyChat && canWorkerWriteToJob;
   const canWorkerUpload = (role === "TJENESTE" || role === "ADMIN") && canWorkerWriteToJob;
   const canWorkerComplete = (role === "TJENESTE" || role === "ADMIN") && order.status === "IN_PROGRESS";
+  const usesCompletionChecklist = isChecklistServiceType(order.type);
   const canCommentOnImages = role === "ADMIN" || !isWorkerParticipant || order.status === "IN_PROGRESS";
   const canStartOrder = (role === "TJENESTE" || role === "ADMIN") && !!order.assignedTo && order.status === "PENDING" && isAssignmentConfirmed;
   const startAvailableNow = role === "ADMIN" ? canStartOrder : canStartOrder && order.canStart === true;
@@ -543,17 +550,19 @@ export function OrderDetailClient({
 
   const completeWithChecklist = async (formData: FormData) => {
     setCompleting(true);
-    const checklist = {
-      bedReady: formData.get("bedReady") === "on",
-      bathroomClean: formData.get("bathroomClean") === "on",
-      kitchenClean: formData.get("kitchenClean") === "on",
-      floorsVacuumed: formData.get("floorsVacuumed") === "on",
-      trashHandled: formData.get("trashHandled") === "on",
-      keysHandled: formData.get("keysHandled") === "on",
-      towelsPrepared: formData.get("towelsPrepared") === "on",
-      suppliesRefilled: formData.get("suppliesRefilled") === "on",
-      allRoomsPhotographed: formData.get("allRoomsPhotographed") === "on",
-    };
+    const checklist = usesCompletionChecklist
+      ? {
+          bedReady: formData.get("bedReady") === "on",
+          bathroomClean: formData.get("bathroomClean") === "on",
+          kitchenClean: formData.get("kitchenClean") === "on",
+          floorsVacuumed: formData.get("floorsVacuumed") === "on",
+          trashHandled: formData.get("trashHandled") === "on",
+          keysHandled: formData.get("keysHandled") === "on",
+          towelsPrepared: formData.get("towelsPrepared") === "on",
+          suppliesRefilled: formData.get("suppliesRefilled") === "on",
+          allRoomsPhotographed: formData.get("allRoomsPhotographed") === "on",
+        }
+      : null;
     const completionNote = String(formData.get("completionNote") ?? "");
 
     const res = await fetch(`/api/orders/${order.id}`, {
@@ -1280,7 +1289,7 @@ export function OrderDetailClient({
           </div>
         )}
 
-        {role === "ADMIN" && (
+        {role === "ADMIN" && usesCompletionChecklist && (
           <div className="mt-3 rounded border border-slate-200 bg-white p-3 text-sm">
             <p className="font-semibold">{t("workerChecklist")}</p>
             <ul className="mt-2 space-y-1">
@@ -1561,18 +1570,22 @@ export function OrderDetailClient({
 
       {canWorkerComplete && (
         <form onSubmit={handleCompleteSubmit} className="panel mt-4 rounded border border-slate-200 p-3">
-          <p className="text-sm font-semibold">{t("workerChecklist")}</p>
-          <div className="mt-2 grid gap-2 text-sm sm:grid-cols-2">
-            <label><input type="checkbox" name="bedReady" /> {formatChecklistLabel("bedReady")}</label>
-            <label><input type="checkbox" name="bathroomClean" /> {t("bathroomClean")}</label>
-            <label><input type="checkbox" name="kitchenClean" /> {t("kitchenClean")}</label>
-            <label><input type="checkbox" name="floorsVacuumed" /> {t("floorsVacuumed")}</label>
-            <label><input type="checkbox" name="trashHandled" /> {t("trashHandled")}</label>
-            <label><input type="checkbox" name="keysHandled" /> {t("keysHandled")}</label>
-            <label><input type="checkbox" name="towelsPrepared" /> {formatChecklistLabel("towelsPrepared")}</label>
-            <label><input type="checkbox" name="suppliesRefilled" /> {t("suppliesRefilled")}</label>
-            <label><input type="checkbox" name="allRoomsPhotographed" /> {t("allRoomsPhotographed")}</label>
-          </div>
+          {usesCompletionChecklist ? (
+            <>
+              <p className="text-sm font-semibold">{t("workerChecklist")}</p>
+              <div className="mt-2 grid gap-2 text-sm sm:grid-cols-2">
+                <label><input type="checkbox" name="bedReady" /> {formatChecklistLabel("bedReady")}</label>
+                <label><input type="checkbox" name="bathroomClean" /> {t("bathroomClean")}</label>
+                <label><input type="checkbox" name="kitchenClean" /> {t("kitchenClean")}</label>
+                <label><input type="checkbox" name="floorsVacuumed" /> {t("floorsVacuumed")}</label>
+                <label><input type="checkbox" name="trashHandled" /> {t("trashHandled")}</label>
+                <label><input type="checkbox" name="keysHandled" /> {t("keysHandled")}</label>
+                <label><input type="checkbox" name="towelsPrepared" /> {formatChecklistLabel("towelsPrepared")}</label>
+                <label><input type="checkbox" name="suppliesRefilled" /> {t("suppliesRefilled")}</label>
+                <label><input type="checkbox" name="allRoomsPhotographed" /> {t("allRoomsPhotographed")}</label>
+              </div>
+            </>
+          ) : null}
           <textarea className="input mt-3" name="completionNote" placeholder={t("completionNote")} />
           <button className="btn btn-primary mt-3" disabled={completing} type="submit">
             {completing ? t("sending") : t("completeWithNote")}

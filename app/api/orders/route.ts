@@ -6,6 +6,7 @@ import { apiError, handleApiError } from "@/lib/api";
 import { orderCreateSchema } from "@/lib/validators";
 import { sendOrderCreatedEmail } from "@/lib/email-notifications";
 import { withDeadlineMetadata } from "@/lib/order-deadline";
+import { isGuestCountServiceType } from "@/lib/service-types";
 import { notifyUserEvent } from "@/lib/user-event-notifications";
 
 export async function GET() {
@@ -49,8 +50,15 @@ export async function POST(req: Request) {
 
     const body = await req.json();
     const data = orderCreateSchema.parse(body);
-    if (data.type === "CLEANING" && (!data.guestCount || data.guestCount < 1)) {
-      return apiError(400, "guestCount is required for cleaning jobs");
+    const details = data.details?.trim() || data.note?.trim() || "";
+    if (!isGuestCountServiceType(data.type) && !data.note?.trim()) {
+      return apiError(400, "job summary is required for this job type");
+    }
+    if (!details) {
+      return apiError(400, "job details are required");
+    }
+    if (isGuestCountServiceType(data.type) && (!data.guestCount || data.guestCount < 1)) {
+      return apiError(400, "guestCount is required for this job type");
     }
     if (isAdmin && !data.landlordId) {
       return apiError(400, "landlordId is required for admin-created orders");
@@ -105,6 +113,7 @@ export async function POST(req: Request) {
         address: data.address,
         date,
         note: withDeadlineMetadata(data.note, deadlineAt.toISOString()),
+        details,
         guestCount: data.guestCount ?? null,
         landlordId,
       },

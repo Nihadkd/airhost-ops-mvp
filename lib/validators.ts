@@ -48,6 +48,7 @@ export const orderCreateSchema = z.object({
   date: z.string().datetime(),
   deadlineAt: z.string().datetime(),
   note: z.string().max(500).optional(),
+  details: z.string().max(3000).optional(),
   guestCount: z.number().int().min(1).max(50).optional(),
   landlordId: z.string().min(1).optional(),
 });
@@ -58,6 +59,7 @@ export const orderUpdateSchema = z.object({
   address: z.string().min(3).optional(),
   date: z.string().datetime().optional(),
   note: z.string().max(500).optional(),
+  details: z.string().max(3000).optional(),
   guestCount: z.number().int().min(1).max(50).nullable().optional(),
   completionNote: z.string().max(1000).optional(),
   completionChecklist: z
