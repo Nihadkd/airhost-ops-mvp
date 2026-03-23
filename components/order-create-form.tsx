@@ -66,6 +66,7 @@ export function OrderCreateForm({
     if (Number.isNaN(date.getTime())) return false;
     return date.getMinutes() === 0 || date.getMinutes() === 30;
   };
+  const isAirbnbOrder = isGuestCountServiceType(selectedType);
 
   const submit = async (formData: FormData) => {
     const selectedLandlordId = canChooseLandlord
@@ -83,19 +84,6 @@ export function OrderCreateForm({
       toast.error(t("timeSlotHalfHourOnly"));
       return;
     }
-    const deadlineDatePart = String(formData.get("deadlineDate"));
-    const deadlineTimePart = String(formData.get("deadlineTime"));
-    const rawDeadline = `${deadlineDatePart}T${deadlineTimePart}`;
-    if (!deadlineDatePart || !deadlineTimePart || !isHalfHourSlot(rawDeadline)) {
-      toast.error(t("timeSlotHalfHourOnly"));
-      return;
-    }
-    const startDate = new Date(rawDate);
-    const deadlineDate = new Date(rawDeadline);
-    if (deadlineDate.getTime() <= startDate.getTime()) {
-      toast.error(t("deadlineAfterStart"));
-      return;
-    }
     const note = String(formData.get("note") || "").trim();
     const details = String(formData.get("details") || "").trim();
     const requiresJobSummary = !isGuestCountServiceType(String(formData.get("type")));
@@ -103,9 +91,26 @@ export function OrderCreateForm({
       toast.error(t("jobSummaryRequired"));
       return;
     }
-    if (!details) {
+    if (!isAirbnbOrder && !details) {
       toast.error(t("jobDetailsRequired"));
       return;
+    }
+    let deadlineAt: string | undefined;
+    if (!isAirbnbOrder) {
+      const deadlineDatePart = String(formData.get("deadlineDate"));
+      const deadlineTimePart = String(formData.get("deadlineTime"));
+      const rawDeadline = `${deadlineDatePart}T${deadlineTimePart}`;
+      if (!deadlineDatePart || !deadlineTimePart || !isHalfHourSlot(rawDeadline)) {
+        toast.error(t("timeSlotHalfHourOnly"));
+        return;
+      }
+      const startDate = new Date(rawDate);
+      const deadlineDate = new Date(rawDeadline);
+      if (deadlineDate.getTime() <= startDate.getTime()) {
+        toast.error(t("deadlineAfterStart"));
+        return;
+      }
+      deadlineAt = deadlineDate.toISOString();
     }
 
     setLoading(true);
@@ -113,9 +118,9 @@ export function OrderCreateForm({
       type: String(formData.get("type")),
       address: String(formData.get("address")),
       date: new Date(rawDate).toISOString(),
-      deadlineAt: deadlineDate.toISOString(),
+      deadlineAt,
       note,
-      details,
+      details: isAirbnbOrder ? undefined : details,
       guestCount: isGuestCountServiceType(String(formData.get("type")))
         ? Number(formData.get("guestCount") || 0) || undefined
         : undefined,
@@ -166,27 +171,31 @@ export function OrderCreateForm({
         </select>
       </label>
       <label className="block">
-        <span className="mb-1 block text-sm text-slate-600">{t("jobSummaryLabel")}</span>
+        <span className="mb-1 block text-sm text-slate-600">
+          {isAirbnbOrder ? t("commentLabel") : t("jobSummaryLabel")}
+        </span>
         <textarea
           name="note"
           className="input min-h-24"
-          placeholder={t("jobSummaryPlaceholder")}
+          placeholder={isAirbnbOrder ? t("notePlaceholder") : t("jobSummaryPlaceholder")}
           required={!isGuestCountServiceType(selectedType)}
         />
         {!isGuestCountServiceType(selectedType) ? (
           <span className="mt-1 block text-xs font-semibold text-slate-500">{t("jobSummaryHint")}</span>
         ) : null}
       </label>
-      <label className="block">
-        <span className="mb-1 block text-sm text-slate-600">{t("jobDetailsLabel")}</span>
-        <textarea
-          name="details"
-          className="input min-h-32"
-          placeholder={t("jobDetailsPlaceholder")}
-          required
-        />
-        <span className="mt-1 block text-xs font-semibold text-slate-500">{t("jobDetailsHint")}</span>
-      </label>
+      {!isAirbnbOrder ? (
+        <label className="block">
+          <span className="mb-1 block text-sm text-slate-600">{t("jobDetailsLabel")}</span>
+          <textarea
+            name="details"
+            className="input min-h-32"
+            placeholder={t("jobDetailsPlaceholder")}
+            required
+          />
+          <span className="mt-1 block text-xs font-semibold text-slate-500">{t("jobDetailsHint")}</span>
+        </label>
+      ) : null}
       {canChooseLandlord && (
         <label className="block">
           <span className="mb-1 block text-sm text-slate-600">{t("roleLandlord")}</span>
@@ -222,23 +231,25 @@ export function OrderCreateForm({
         </div>
         <span className="mt-1 block text-xs text-slate-500">{t("timeSlotHalfHourOnly")}</span>
       </label>
-      <label className="block">
-        <span className="mb-1 block text-sm text-slate-600">{t("deadlineDateTimeLabel")}</span>
-        <div className="grid gap-3 sm:grid-cols-2">
-          <input type="date" name="deadlineDate" className="input" required />
-          <select name="deadlineTime" className="input" defaultValue="" required>
-            <option value="" disabled>
-              {t("selectTime")}
-            </option>
-            {TIME_OPTIONS.map((time) => (
-              <option key={`deadline-${time}`} value={time}>
-                {time}
+      {!isAirbnbOrder ? (
+        <label className="block">
+          <span className="mb-1 block text-sm text-slate-600">{t("deadlineDateTimeLabel")}</span>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <input type="date" name="deadlineDate" className="input" required />
+            <select name="deadlineTime" className="input" defaultValue="" required>
+              <option value="" disabled>
+                {t("selectTime")}
               </option>
-            ))}
-          </select>
-        </div>
-        <span className="mt-1 block text-xs text-slate-500">{t("deadlineAfterStartHint")}</span>
-      </label>
+              {TIME_OPTIONS.map((time) => (
+                <option key={`deadline-${time}`} value={time}>
+                  {time}
+                </option>
+              ))}
+            </select>
+          </div>
+          <span className="mt-1 block text-xs text-slate-500">{t("deadlineAfterStartHint")}</span>
+        </label>
+      ) : null}
       {isGuestCountServiceType(selectedType) ? (
         <label className="block">
           <span className="mb-1 block text-sm font-bold text-slate-900">{t("guestCount")}</span>

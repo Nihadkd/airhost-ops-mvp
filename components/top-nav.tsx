@@ -85,7 +85,7 @@ export function TopNav({ initialMe }: { initialMe: Me }) {
     <header className="panel mx-auto mt-4 w-[95%] max-w-6xl px-4 py-3">
       <div className="flex items-center justify-between gap-3">
         <Link
-          href="/dashboard"
+          href="/"
           onClick={() => setMenuOpen(false)}
           className="group inline-flex items-center gap-3 rounded-xl px-1 py-1 transition-colors hover:bg-slate-100"
           aria-label={t("home")}

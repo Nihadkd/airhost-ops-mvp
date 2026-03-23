@@ -49,10 +49,11 @@ export async function POST(req: Request) {
     }
 
     const password = await bcrypt.hash(data.password, 10);
+    const selectedRole = data.role ?? "BEGGE";
     const profile =
-      data.role === "TJENESTE"
+      selectedRole === "TJENESTE"
         ? { role: Role.TJENESTE, canLandlord: false, canService: true, activeMode: ProfileMode.TJENESTE }
-        : data.role === "BEGGE"
+        : selectedRole === "BEGGE"
           ? { role: Role.UTLEIER, canLandlord: true, canService: true, activeMode: ProfileMode.UTLEIER }
           : { role: Role.UTLEIER, canLandlord: true, canService: false, activeMode: ProfileMode.UTLEIER };
 

@@ -46,7 +46,7 @@ export const orderCreateSchema = z.object({
   type: z.nativeEnum(ServiceType),
   address: z.string().min(3),
   date: z.string().datetime(),
-  deadlineAt: z.string().datetime(),
+  deadlineAt: z.string().datetime().optional(),
   note: z.string().max(500).optional(),
   details: z.string().max(3000).optional(),
   guestCount: z.number().int().min(1).max(50).optional(),

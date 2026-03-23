@@ -105,12 +105,27 @@ describe("/api/orders", () => {
     expect(res.status).toBe(400);
   });
 
-  it("POST requires detailed job text", async () => {
+  it("POST allows Airbnb order without detailed job text", async () => {
+    vi.mocked(requireAuth).mockResolvedValue({ user: { id: "l1", role: "UTLEIER" } } as never);
+    vi.mocked(prisma.serviceOrder.findFirst).mockResolvedValue(null as never);
+    vi.mocked(prisma.serviceOrder.create).mockResolvedValue({ id: "o1" } as never);
+
+    const req = new Request("http://localhost/api/orders", {
+      method: "POST",
+      body: JSON.stringify({ type: "KEY_HANDLING", address: "Street 1", date: validHalfHourIso, guestCount: 2 }),
+      headers: { "Content-Type": "application/json" },
+    });
+
+    const res = await createOrder(req);
+    expect(res.status).toBe(201);
+  });
+
+  it("POST requires detailed job text for non-Airbnb jobs", async () => {
     vi.mocked(requireAuth).mockResolvedValue({ user: { id: "l1", role: "UTLEIER" } } as never);
 
     const req = new Request("http://localhost/api/orders", {
       method: "POST",
-      body: JSON.stringify({ type: "KEY_HANDLING", address: "Street 1", date: validHalfHourIso, deadlineAt: validDeadlineHalfHourIso, guestCount: 2 }),
+      body: JSON.stringify({ type: "CLEANING", address: "Street 1", date: validHalfHourIso, deadlineAt: validDeadlineHalfHourIso, note: "Kort sammendrag" }),
       headers: { "Content-Type": "application/json" },
     });
 
@@ -127,8 +142,7 @@ describe("/api/orders", () => {
         type: "KEY_HANDLING",
         address: "Street 1",
         date: validHalfHourIso,
-        deadlineAt: validDeadlineHalfHourIso,
-        details: "Handle check-in, check-out, key handover and prepare the apartment for the next guest.",
+        note: "Handle check-in, check-out, key handover and prepare the apartment for the next guest.",
       }),
       headers: { "Content-Type": "application/json" },
     });

@@ -1,10 +1,14 @@
 import { PublicHomePage } from "@/components/public-home-page";
+import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { splitOrderNote } from "@/lib/order-deadline";
+import { resolveUserRole } from "@/lib/user-role";
 
 export const dynamic = "force-dynamic";
 
 export default async function HomePage() {
+  const session = await auth();
+  const resolved = session?.user?.id ? await resolveUserRole(session.user.id).catch(() => null) : null;
   const jobs = await prisma.serviceOrder.findMany({
     where: {
       assignedToId: null,
@@ -31,5 +35,19 @@ export default async function HomePage() {
     };
   });
 
-  return <PublicHomePage jobs={publicJobs} />;
+  return (
+    <PublicHomePage
+      jobs={publicJobs}
+      isAuthenticated={Boolean(session?.user?.id)}
+      me={
+        session?.user?.id && resolved
+          ? {
+              name: session.user.name,
+              accountRole: session.user.role,
+              effectiveRole: resolved.role,
+            }
+          : null
+      }
+    />
+  );
 }

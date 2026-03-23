@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { signOut } from "next-auth/react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useLanguage } from "@/lib/language-context";
 import { inferCity, inferCounty, NORWEGIAN_COUNTIES } from "@/lib/public-job-presentation";
 import { getServiceTypeTranslationKey, ORDERABLE_SERVICE_TYPES } from "@/lib/service-types";
@@ -13,6 +14,12 @@ type PublicJob = {
   address: string;
   date: string;
   note: string | null;
+};
+
+type Me = {
+  name: string;
+  accountRole: "ADMIN" | "UTLEIER" | "TJENESTE";
+  effectiveRole: "ADMIN" | "UTLEIER" | "TJENESTE";
 };
 
 type SortMode = "SOONEST" | "NEWEST" | "OLDEST";
@@ -78,13 +85,25 @@ function CategoryIcon({ type }: { type: string }) {
   }
 }
 
-export function PublicHomePage({ jobs }: { jobs: PublicJob[] }) {
+export function PublicHomePage({
+  jobs,
+  isAuthenticated = false,
+  me = null,
+}: {
+  jobs: PublicJob[];
+  isAuthenticated?: boolean;
+  me?: Me | null;
+}) {
   const [query, setQuery] = useState("");
   const [selectedType, setSelectedType] = useState<string>("ALL");
   const [selectedCounty, setSelectedCounty] = useState<string>("Alle fylker");
   const [sortMode, setSortMode] = useState<SortMode>("SOONEST");
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [unreadCount, setUnreadCount] = useState(0);
   const { t, lang } = useLanguage();
   const locale = lang === "no" ? "nb-NO" : "en-GB";
+  const menuRef = useRef<HTMLDivElement | null>(null);
+  const hasAdminAccess = me?.accountRole === "ADMIN";
 
   const categories = useMemo(() => {
     return ORDERABLE_SERVICE_TYPES.map((type) => {
@@ -140,10 +159,73 @@ export function PublicHomePage({ jobs }: { jobs: PublicJob[] }) {
       });
   }, [jobs, query, selectedCounty, selectedType, sortMode, t]);
 
+  const menuItems = useMemo(
+    () =>
+      me
+        ? [
+            { href: "/orders/my", label: t("myOrdersMenu"), show: true },
+            { href: "/prices", label: t("prices"), show: true },
+            { href: "/messages", label: t("messages"), show: true },
+            { href: "/orders/new", label: t("newOrder"), show: hasAdminAccess || me.effectiveRole === "UTLEIER" || me.effectiveRole === "ADMIN" },
+            { href: "/profile", label: `${t("profile")} (${me.name})`, show: true },
+            { href: "/settings", label: t("settings"), show: true },
+            { href: "/admin/users", label: t("users"), show: hasAdminAccess || me.effectiveRole === "ADMIN" },
+            { href: "/admin/lab", label: t("adminLab"), show: hasAdminAccess || me.effectiveRole === "ADMIN" },
+          ]
+        : [],
+    [hasAdminAccess, me, t],
+  );
+
+  useEffect(() => {
+    if (!menuOpen) return;
+    const onClickAway = (event: MouseEvent) => {
+      if (!menuRef.current?.contains(event.target as Node)) {
+        setMenuOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", onClickAway);
+    return () => document.removeEventListener("mousedown", onClickAway);
+  }, [menuOpen]);
+
+  useEffect(() => {
+    if (!isAuthenticated) return;
+    let mounted = true;
+
+    const refreshUnreadCount = async () => {
+      try {
+        const res = await fetch("/api/notifications/unread-count", { cache: "no-store" });
+        if (!res.ok) return;
+        const data = (await res.json()) as { count?: number };
+        if (!mounted) return;
+        const next = Number(data?.count ?? 0);
+        setUnreadCount(Number.isFinite(next) && next > 0 ? next : 0);
+      } catch {
+        // Ignore transient errors.
+      }
+    };
+
+    void refreshUnreadCount();
+    const timer = window.setInterval(() => {
+      if (document.visibilityState === "visible") {
+        void refreshUnreadCount();
+      }
+    }, 15000);
+    const onFocus = () => void refreshUnreadCount();
+    window.addEventListener("focus", onFocus);
+    document.addEventListener("visibilitychange", onFocus);
+
+    return () => {
+      mounted = false;
+      window.clearInterval(timer);
+      window.removeEventListener("focus", onFocus);
+      document.removeEventListener("visibilitychange", onFocus);
+    };
+  }, [isAuthenticated]);
+
   return (
     <main className="min-h-screen bg-[linear-gradient(180deg,#f4fbfb_0%,#eff6f8_32%,#ffffff_100%)] px-4 pb-16 pt-6 sm:px-6 lg:px-8">
       <div className="mx-auto max-w-6xl">
-        <header className="flex flex-wrap items-center justify-between gap-4 rounded-[28px] border border-white/70 bg-white/80 px-5 py-4 shadow-[0_24px_80px_rgba(10,45,61,0.10)] backdrop-blur sm:px-7">
+        <header className="relative z-[80] flex flex-wrap items-center justify-between gap-4 rounded-[28px] border border-white/70 bg-white/80 px-5 py-4 shadow-[0_24px_80px_rgba(10,45,61,0.10)] backdrop-blur sm:px-7">
           <Link href="/" className="inline-flex items-center gap-3" aria-label="ServNest">
             <span className="inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-[linear-gradient(135deg,#0b8f7b,#12303d)] text-white shadow-lg">
               <svg width="22" height="22" viewBox="0 0 24 24" aria-hidden="true">
@@ -156,14 +238,59 @@ export function PublicHomePage({ jobs }: { jobs: PublicJob[] }) {
             </div>
           </Link>
 
-          <div className="flex flex-wrap gap-2">
-            <Link href="/login" className="btn btn-secondary">
-              Logg inn
-            </Link>
-            <Link href="/orders/new" className="btn btn-primary">
-              Legg ut jobb
-            </Link>
-          </div>
+          {isAuthenticated && me ? (
+            <div className="relative" ref={menuRef}>
+                <button
+                  type="button"
+                  className="inline-flex h-[42px] w-[42px] items-center justify-center rounded-[14px] bg-slate-100 text-slate-700"
+                  aria-label={t("menu")}
+                  title={t("menu")}
+                  onClick={() => setMenuOpen((prev) => !prev)}
+                >
+                  <svg width="18" height="18" viewBox="0 0 16 16" aria-hidden="true">
+                    <circle cx="8" cy="3" r="1.5" fill="currentColor" />
+                    <circle cx="8" cy="8" r="1.5" fill="currentColor" />
+                    <circle cx="8" cy="13" r="1.5" fill="currentColor" />
+                  </svg>
+                </button>
+                {menuOpen && (
+                  <div className="absolute right-0 z-50 mt-2 w-72 rounded-xl border border-slate-200 bg-white p-3 shadow-lg">
+                    <p className="mb-2 text-xs uppercase tracking-wide text-slate-500">{t("menu")}</p>
+                    <nav className="space-y-1">
+                      {menuItems.filter((item) => item.show).map((item) => (
+                        <Link
+                          key={item.href}
+                          href={item.href}
+                          onClick={() => setMenuOpen(false)}
+                          className="flex items-center justify-between rounded-lg px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100"
+                        >
+                          <span>{item.label}</span>
+                          {item.href === "/messages" && unreadCount > 0 ? (
+                            <span className="inline-flex min-w-[22px] items-center justify-center rounded-full bg-teal-700 px-2 py-0.5 text-xs font-bold text-white">
+                              {unreadCount}
+                            </span>
+                          ) : null}
+                        </Link>
+                      ))}
+                    </nav>
+                    <div className="mt-3 border-t border-slate-200 pt-3">
+                      <button className="btn btn-danger w-full" onClick={() => signOut({ callbackUrl: "/login" })}>
+                        {t("logout")}
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+          ) : (
+            <div className="flex flex-wrap gap-2">
+              <Link href="/login" className="btn btn-secondary">
+                Logg inn
+              </Link>
+              <Link href="/orders/new" className="btn btn-primary">
+                Legg ut jobb
+              </Link>
+            </div>
+          )}
         </header>
 
         <section className="relative mt-6 overflow-hidden rounded-[36px] border border-[#d7e7ea] bg-[radial-gradient(circle_at_top,#f8fffd_0%,#ecf6f7_40%,#f8fbfc_100%)] px-6 py-8 shadow-[0_28px_90px_rgba(15,48,61,0.12)] sm:px-10 sm:py-12">
@@ -174,10 +301,10 @@ export function PublicHomePage({ jobs }: { jobs: PublicJob[] }) {
             <div>
               <p className="text-xs font-black uppercase tracking-[0.28em] text-teal-700">Lokale oppdrag. Rask hjelp. Trygg flyt.</p>
               <h1 className="mt-4 max-w-3xl text-4xl font-black leading-[0.98] text-slate-900 sm:text-[4.1rem]">
-                Finn hjelp i nærheten, eller tjen penger på oppdrag som passer deg
+                Hjelp og oppdrag, samlet på ett sted
               </h1>
               <p className="mt-5 max-w-2xl text-base leading-7 text-slate-600 sm:text-lg">
-                ServNest gjør det enkelt å oppdage ledige jobber, legge ut egne behov og holde hele avtalen samlet på ett sted.
+                Fra små oppdrag til større behov, ServNest kobler folk som trenger hjelp med folk som kan hjelpe.
               </p>
 
               <label htmlFor="public-search" className="sr-only">
@@ -210,7 +337,9 @@ export function PublicHomePage({ jobs }: { jobs: PublicJob[] }) {
                 </Link>
               </div>
               <p className="mt-3 text-sm font-medium text-slate-500">
-                Innlogging kreves når du skal legge ut eller påta deg en jobb.
+                {isAuthenticated
+                  ? "Du er innlogget og kan ta oppdrag eller legge ut nye jobber."
+                  : "Innlogging kreves når du skal legge ut eller påta deg en jobb."}
               </p>
             </div>
 
@@ -245,44 +374,58 @@ export function PublicHomePage({ jobs }: { jobs: PublicJob[] }) {
             <h2 className="mt-2 text-2xl font-black text-slate-900">Utforsk tjenester etter behov</h2>
           </div>
 
-          <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
+          <div className="mt-4 grid gap-1.5 sm:grid-cols-2 lg:grid-cols-5 xl:grid-cols-6">
             <button
               type="button"
               onClick={() => setSelectedType("ALL")}
-              className={`rounded-[24px] border px-4 py-5 text-left transition ${
+              className={`rounded-[16px] border px-3 py-2.5 text-left transition ${
                 selectedType === "ALL"
                   ? "border-slate-900 bg-slate-900 text-white shadow-[0_18px_36px_rgba(15,23,42,0.18)]"
                   : "border-white/80 bg-white/90 text-slate-700 shadow-[0_16px_32px_rgba(15,48,61,0.07)] hover:border-teal-300 hover:text-teal-700"
               }`}
             >
-              <span className={`inline-flex h-10 w-10 items-center justify-center rounded-2xl ${selectedType === "ALL" ? "bg-white/12" : "bg-slate-100"}`}>
-                <svg className="h-5 w-5" viewBox="0 0 24 24" aria-hidden="true">
+              <span className={`inline-flex h-11 w-11 items-center justify-center rounded-[18px] ${selectedType === "ALL" ? "bg-white/12" : "bg-slate-100"}`}>
+                <svg className="h-5.5 w-5.5" viewBox="0 0 24 24" aria-hidden="true">
                   <path d="M4 12h16M12 4v16" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
                 </svg>
               </span>
-              <p className="mt-3 text-base font-black">Alle tjenester</p>
-              <p className={`mt-1 text-sm ${selectedType === "ALL" ? "text-white/78" : "text-slate-500"}`}>Se hele markedet</p>
+              <p className="mt-1.5 text-[0.92rem] font-black">Alle tjenester</p>
+              <p className={`mt-0.5 text-[0.8rem] ${selectedType === "ALL" ? "text-white/78" : "text-slate-500"}`}>Se hele markedet</p>
             </button>
-            {categories.map((category) => (
-              <button
-                key={category.type}
-                type="button"
-                onClick={() => setSelectedType(category.type)}
-                className={`rounded-[24px] border px-4 py-5 text-left transition ${
-                  selectedType === category.type
-                    ? "border-teal-700 bg-teal-700 text-white shadow-[0_18px_36px_rgba(11,143,123,0.18)]"
-                    : "border-white/80 bg-white/90 text-slate-700 shadow-[0_16px_32px_rgba(15,48,61,0.07)] hover:border-teal-300 hover:text-teal-700"
-                }`}
-              >
-                <span className={`inline-flex h-10 w-10 items-center justify-center rounded-2xl ${selectedType === category.type ? "bg-white/12" : "bg-slate-100"}`}>
-                  <CategoryIcon type={category.type} />
-                </span>
-                <p className="mt-3 text-base font-black">{category.label}</p>
-                <p className={`mt-1 text-sm ${selectedType === category.type ? "text-white/80" : "text-slate-500"}`}>
-                  Filtrer oppdrag i denne kategorien
-                </p>
-              </button>
-            ))}
+            {categories.map((category) =>
+              category.type === "KEY_HANDLING" ? (
+                <Link
+                  key={category.type}
+                  href="/airbnb"
+                  className="rounded-[16px] border border-white/80 bg-white/90 px-3 py-2.5 text-left text-slate-700 shadow-[0_16px_32px_rgba(15,48,61,0.07)] transition hover:border-teal-300 hover:text-teal-700"
+                >
+                  <span className="inline-flex h-11 w-11 items-center justify-center rounded-[18px] bg-slate-100">
+                    <CategoryIcon type={category.type} />
+                  </span>
+                  <p className="mt-1.5 text-[0.92rem] font-black">{category.label}</p>
+                  <p className="mt-1 text-sm text-slate-500">Åpne Airbnb-siden</p>
+                </Link>
+              ) : (
+                <button
+                  key={category.type}
+                  type="button"
+                  onClick={() => setSelectedType(category.type)}
+                  className={`rounded-[16px] border px-3 py-2.5 text-left transition ${
+                    selectedType === category.type
+                      ? "border-teal-700 bg-teal-700 text-white shadow-[0_18px_36px_rgba(11,143,123,0.18)]"
+                      : "border-white/80 bg-white/90 text-slate-700 shadow-[0_16px_32px_rgba(15,48,61,0.07)] hover:border-teal-300 hover:text-teal-700"
+                  }`}
+                >
+                  <span className={`inline-flex h-11 w-11 items-center justify-center rounded-[18px] ${selectedType === category.type ? "bg-white/12" : "bg-slate-100"}`}>
+                    <CategoryIcon type={category.type} />
+                  </span>
+                  <p className="mt-1.5 text-[0.92rem] font-black">{category.label}</p>
+                  <p className={`mt-0.5 text-[0.8rem] ${selectedType === category.type ? "text-white/80" : "text-slate-500"}`}>
+                    Filtrer oppdrag i denne kategorien
+                  </p>
+                </button>
+              ),
+            )}
           </div>
         </section>
 
@@ -346,39 +489,109 @@ export function PublicHomePage({ jobs }: { jobs: PublicJob[] }) {
           </div>
 
           {filteredJobs.length > 0 ? (
-            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-              {filteredJobs.map((job) => {
-                const translationKey = getServiceTypeTranslationKey(job.type);
-                const typeLabel = translationKey ? t(translationKey) : job.type;
-                const note = job.note?.trim() || "Se oppdragsdetaljene for full beskrivelse.";
+            <section className="panel rounded-[28px] p-5">
+              <div className="hidden lg:block">
+                <table className="w-full table-fixed text-left">
+                  <colgroup>
+                    <col className="w-[10%]" />
+                    <col className="w-[18%]" />
+                    <col className="w-[28%]" />
+                    <col className="w-[12%]" />
+                    <col className="w-[14%]" />
+                    <col className="w-[18%]" />
+                  </colgroup>
+                  <thead>
+                    <tr className="border-b border-teal-200 text-[0.82rem] font-semibold text-slate-900">
+                      <th className="pb-1.5 pr-4">ID-nummer</th>
+                      <th className="pb-1.5 pr-4">Type</th>
+                      <th className="pb-1.5 pr-4">Adresse</th>
+                      <th className="pb-1.5 pr-4">Område</th>
+                      <th className="pb-1.5 pr-4">Dato</th>
+                      <th className="pb-1.5">Oppdrag</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filteredJobs.map((job) => {
+                      const translationKey = getServiceTypeTranslationKey(job.type);
+                      const typeLabel = translationKey ? t(translationKey) : job.type;
+                      const note = job.note?.trim() || "Se oppdragsdetaljene for full beskrivelse.";
 
-                return (
-                  <Link
-                    key={job.id}
-                    href={`/oppdrag/${job.id}`}
-                    className="panel block rounded-[26px] border border-white/80 bg-white/96 px-4 py-4 transition hover:-translate-y-1 hover:shadow-[0_22px_56px_rgba(15,48,61,0.12)]"
-                  >
-                    <div className="flex items-center justify-between gap-2">
-                      <span className="rounded-full bg-teal-50 px-3 py-1 text-[10px] font-black uppercase tracking-[0.14em] text-teal-800">
-                        {typeLabel}
-                      </span>
-                      <span className="text-[11px] font-semibold text-slate-500">#{job.orderNumber}</span>
-                    </div>
-                    <h3 className="mt-4 line-clamp-2 text-[1.05rem] font-black leading-6 text-slate-900">{note}</h3>
-                    <div className="mt-4 grid gap-2 rounded-[20px] bg-slate-50 px-3 py-3">
-                      <div className="flex items-center justify-between gap-3">
-                        <span className="text-[10px] font-black uppercase tracking-[0.16em] text-teal-700">{inferCity(job.address)}</span>
-                        <span className="text-[10px] font-black uppercase tracking-[0.14em] text-slate-400">{inferCounty(job.address)}</span>
+                      return (
+                        <tr
+                          key={job.id}
+                          className="cursor-pointer border-b border-teal-200 bg-[#f3fbfa] align-top transition hover:bg-[#edf8f7]"
+                          onClick={() => {
+                            window.location.href = `/oppdrag/${job.id}`;
+                          }}
+                        >
+                          <td className="py-1 pr-4 text-[0.82rem] font-semibold text-slate-900">#{job.orderNumber}</td>
+                          <td className="py-1 pr-4 text-[0.82rem] text-slate-900">{typeLabel}</td>
+                          <td className="py-1 pr-4 text-[0.82rem] text-slate-900">
+                            <div className="break-words">{job.address}</div>
+                            <a
+                              href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(job.address)}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="mt-0.5 inline-flex items-center rounded-[10px] border border-teal-400 bg-[#d5fbf4] px-2 py-[0.15rem] text-[0.72rem] font-semibold text-teal-900 shadow-sm"
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              Kart
+                            </a>
+                          </td>
+                          <td className="py-1 pr-4 text-[0.82rem] text-slate-900">{inferCounty(job.address)}</td>
+                          <td className="py-1 pr-4 text-[0.82rem] text-slate-900">
+                            {new Date(job.date).toLocaleDateString(locale)}
+                          </td>
+                          <td className="py-1 text-[0.82rem] text-slate-700">{note}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+
+              <div className="space-y-3 lg:hidden">
+                {filteredJobs.map((job) => {
+                  const translationKey = getServiceTypeTranslationKey(job.type);
+                  const typeLabel = translationKey ? t(translationKey) : job.type;
+                  const note = job.note?.trim() || "Se oppdragsdetaljene for full beskrivelse.";
+
+                  return (
+                    <Link
+                      key={job.id}
+                      href={`/oppdrag/${job.id}`}
+                      className="block rounded-2xl border border-teal-200 bg-[#f3fbfa] p-4 shadow-sm"
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <p className="text-lg font-semibold text-slate-900">#{job.orderNumber}</p>
+                          <p className="text-base text-slate-900">{typeLabel}</p>
+                        </div>
+                        <span className="rounded-full bg-teal-50 px-3 py-1 text-[10px] font-black uppercase tracking-[0.14em] text-teal-800">
+                          {inferCounty(job.address)}
+                        </span>
                       </div>
-                      <p className="line-clamp-1 text-sm font-semibold text-slate-700">{job.address}</p>
-                      <p className="text-sm font-medium text-slate-500">
-                        {new Date(job.date).toLocaleString(locale, { hour12: false })}
-                      </p>
-                    </div>
-                  </Link>
-                );
-              })}
-            </div>
+                      <p className="mt-3 text-base font-semibold text-slate-900">{note}</p>
+                      <a
+                        href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(job.address)}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        onClick={(e) => e.stopPropagation()}
+                        className="mt-2 inline-flex items-center rounded-[10px] border border-teal-400 bg-[#d5fbf4] px-2.5 py-[0.2rem] text-[0.8rem] font-semibold text-teal-900 shadow-sm"
+                      >
+                        Kart
+                      </a>
+                      <div className="mt-3 flex items-end justify-between gap-3">
+                        <p className="text-sm font-medium text-slate-500">{inferCity(job.address)}</p>
+                        <p className="text-sm text-slate-600">
+                          {new Date(job.date).toLocaleDateString(locale)}
+                        </p>
+                      </div>
+                    </Link>
+                  );
+                })}
+              </div>
+            </section>
           ) : (
             <div className="panel rounded-[24px] px-5 py-6 text-sm text-slate-500">
               Ingen ledige oppdrag matcher filtrene dine akkurat nå.

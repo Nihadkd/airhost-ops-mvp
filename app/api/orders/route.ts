@@ -50,14 +50,16 @@ export async function POST(req: Request) {
 
     const body = await req.json();
     const data = orderCreateSchema.parse(body);
-    const details = data.details?.trim() || data.note?.trim() || "";
-    if (!isGuestCountServiceType(data.type) && !data.note?.trim()) {
+    const isAirbnbOrder = isGuestCountServiceType(data.type);
+    const note = data.note?.trim() || "";
+    const details = isAirbnbOrder ? note : data.details?.trim() || "";
+    if (!isAirbnbOrder && !note) {
       return apiError(400, "job summary is required for this job type");
     }
-    if (!details) {
+    if (!isAirbnbOrder && !details) {
       return apiError(400, "job details are required");
     }
-    if (isGuestCountServiceType(data.type) && (!data.guestCount || data.guestCount < 1)) {
+    if (isAirbnbOrder && (!data.guestCount || data.guestCount < 1)) {
       return apiError(400, "guestCount is required for this job type");
     }
     if (isAdmin && !data.landlordId) {
@@ -76,21 +78,27 @@ export async function POST(req: Request) {
       landlordRecipient = { email: landlord.email, name: landlord.name };
     }
     const date = new Date(data.date);
-    const deadlineAt = new Date(data.deadlineAt);
     const minutes = date.getUTCMinutes();
     if ((minutes !== 0 && minutes !== 30) || date.getUTCSeconds() !== 0 || date.getUTCMilliseconds() !== 0) {
       return apiError(400, "Order date must be on the hour or half hour");
     }
-    const deadlineMinutes = deadlineAt.getUTCMinutes();
-    if (
-      (deadlineMinutes !== 0 && deadlineMinutes !== 30) ||
-      deadlineAt.getUTCSeconds() !== 0 ||
-      deadlineAt.getUTCMilliseconds() !== 0
-    ) {
-      return apiError(400, "Order deadline must be on the hour or half hour");
-    }
-    if (deadlineAt.getTime() <= date.getTime()) {
-      return apiError(400, "Order deadline must be after start time");
+    let deadlineAt: Date | null = null;
+    if (!isAirbnbOrder) {
+      if (!data.deadlineAt) {
+        return apiError(400, "Order deadline is required");
+      }
+      deadlineAt = new Date(data.deadlineAt);
+      const deadlineMinutes = deadlineAt.getUTCMinutes();
+      if (
+        (deadlineMinutes !== 0 && deadlineMinutes !== 30) ||
+        deadlineAt.getUTCSeconds() !== 0 ||
+        deadlineAt.getUTCMilliseconds() !== 0
+      ) {
+        return apiError(400, "Order deadline must be on the hour or half hour");
+      }
+      if (deadlineAt.getTime() <= date.getTime()) {
+        return apiError(400, "Order deadline must be after start time");
+      }
     }
 
     const duplicate = await prisma.serviceOrder.findFirst({
@@ -112,8 +120,8 @@ export async function POST(req: Request) {
         type: data.type,
         address: data.address,
         date,
-        note: withDeadlineMetadata(data.note, deadlineAt.toISOString()),
-        details,
+        note: isAirbnbOrder ? (note || null) : withDeadlineMetadata(note, deadlineAt?.toISOString()),
+        details: details || null,
         guestCount: data.guestCount ?? null,
         landlordId,
       },

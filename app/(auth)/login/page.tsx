@@ -16,7 +16,7 @@ export default function LoginPage() {
 
   useEffect(() => {
     if (status === "authenticated") {
-      router.replace("/dashboard");
+      router.replace("/");
     }
   }, [router, status]);
 
@@ -43,7 +43,7 @@ export default function LoginPage() {
         return;
       }
 
-      router.push("/dashboard");
+      router.push("/");
     } catch {
       setLoading(false);
       setError(t("loginUnknownError"));

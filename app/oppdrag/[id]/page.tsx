@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { splitOrderNote } from "@/lib/order-deadline";
 import { inferCity, inferCounty } from "@/lib/public-job-presentation";
@@ -34,6 +35,7 @@ function getPublicServiceLabel(type: ServiceType) {
 
 export default async function PublicJobDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
+  const session = await auth();
   const job = await prisma.serviceOrder.findFirst({
     where: {
       id,
@@ -129,12 +131,25 @@ export default async function PublicJobDetailPage({ params }: { params: Promise<
           </div>
 
           <div className="mt-8 flex flex-wrap gap-3">
-            <Link href="/login" className="btn btn-primary">
-              Logg inn for å ta oppdrag
-            </Link>
-            <Link href="/login" className="btn btn-secondary">
-              Logg inn for mer informasjon
-            </Link>
+            {session?.user?.id ? (
+              <>
+                <Link href={`/orders/${job.id}`} className="btn btn-primary">
+                  Åpne oppdrag
+                </Link>
+                <Link href="/orders/new" className="btn btn-secondary">
+                  Legg ut jobb
+                </Link>
+              </>
+            ) : (
+              <>
+                <Link href="/login" className="btn btn-primary">
+                  Logg inn for å ta oppdrag
+                </Link>
+                <Link href="/login" className="btn btn-secondary">
+                  Logg inn for mer informasjon
+                </Link>
+              </>
+            )}
           </div>
         </section>
       </div>

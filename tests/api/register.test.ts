@@ -34,7 +34,6 @@ describe("POST /api/auth/register", () => {
         email: "a@a.com",
         phone: "+4790000000",
         password: "password123",
-        role: "TJENESTE",
         acceptedTerms: true,
       }),
       headers: { "Content-Type": "application/json" },

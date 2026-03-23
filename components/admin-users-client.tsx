@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
 import toast from "react-hot-toast";
 import { useLanguage } from "@/lib/language-context";
 import { toUserErrorMessage } from "@/lib/client-error";
@@ -19,14 +19,13 @@ type User = {
   _count: {
     landlordOrders: number;
     assignedOrders: number;
-    reviewsWritten: number;
-    reviewsReceived: number;
     pushTokens: number;
   };
 };
 
 export function AdminUsersClient({ initialUsers }: { initialUsers: User[] }) {
   const [users, setUsers] = useState(initialUsers);
+  const [query, setQuery] = useState("");
   const { t, lang } = useLanguage();
   const totalUsers = users.length;
   const activeUsers = users.filter((u) => u.isActive).length;
@@ -51,12 +50,23 @@ export function AdminUsersClient({ initialUsers }: { initialUsers: User[] }) {
     return "-";
   };
   const getModeLabel = (mode: User["activeMode"]) => (mode === "UTLEIER" ? t("viewAsLandlord") : t("viewAsWorker"));
+  const normalizedQuery = query.trim().toLowerCase();
+  const filteredUsers = normalizedQuery
+    ? users.filter((user) =>
+        [user.id, user.name, user.email, user.phone ?? ""].some((value) => value.toLowerCase().includes(normalizedQuery)),
+      )
+    : users;
 
   const refresh = async () => {
     const res = await fetch("/api/users", { cache: "no-store" });
     const data = (await res.json()) as User[];
     setUsers(data);
   };
+
+  useEffect(() => {
+    if (initialUsers.length > 0) return;
+    void refresh();
+  }, [initialUsers.length]);
 
   const createUser = async (formData: FormData) => {
     const payload = {
@@ -80,6 +90,13 @@ export function AdminUsersClient({ initialUsers }: { initialUsers: User[] }) {
 
     toast.success(t("userCreated"));
     await refresh();
+  };
+
+  const handleCreateUser = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const form = event.currentTarget;
+    await createUser(new FormData(form));
+    form.reset();
   };
 
   const toggleActive = async (user: User) => {
@@ -113,7 +130,11 @@ export function AdminUsersClient({ initialUsers }: { initialUsers: User[] }) {
 
   return (
     <div className="space-y-6">
-      <form action={createUser} className="panel grid gap-3 p-5 md:grid-cols-2">
+      <div>
+        <h1 className="mb-1 text-2xl font-bold">{t("fullUserOverviewTitle")}</h1>
+        <p className="text-sm text-slate-600">{t("fullUserOverviewSubtitle")}</p>
+      </div>
+      <form onSubmit={(event) => void handleCreateUser(event)} className="panel grid gap-3 p-5 md:grid-cols-2">
         <h2 className="md:col-span-2 text-lg font-semibold">{t("createUserTitle")}</h2>
         <input className="input" name="name" placeholder={t("name")} required />
         <input className="input" type="email" name="email" placeholder={t("email")} required />
@@ -136,6 +157,16 @@ export function AdminUsersClient({ initialUsers }: { initialUsers: User[] }) {
           <div className="rounded-lg border border-slate-200 bg-white px-3 py-2"><strong>{t("landlordsLabel")}:</strong> {landlords}</div>
           <div className="rounded-lg border border-slate-200 bg-white px-3 py-2"><strong>{t("workersLabel")}:</strong> {workers}</div>
         </div>
+        <div className="mb-4">
+          <input
+            className="input max-w-md"
+            type="search"
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder={t("searchUsers")}
+            aria-label={t("searchUsers")}
+          />
+        </div>
         <table className="w-full text-left text-sm">
           <thead>
             <tr className="border-b border-slate-200">
@@ -156,7 +187,7 @@ export function AdminUsersClient({ initialUsers }: { initialUsers: User[] }) {
             </tr>
           </thead>
           <tbody>
-            {users.map((user) => (
+            {filteredUsers.map((user) => (
               <tr key={user.id} className="border-b border-slate-100">
                 <td className="py-2 font-mono text-xs">{user.id.slice(0, 8)}</td>
                 <td className="py-2">{user.name}</td>
@@ -184,6 +215,13 @@ export function AdminUsersClient({ initialUsers }: { initialUsers: User[] }) {
                 </td>
               </tr>
             ))}
+            {filteredUsers.length === 0 ? (
+              <tr>
+                <td colSpan={14} className="py-4 text-sm text-slate-500">
+                  {t("noUsersMatchSearch")}
+                </td>
+              </tr>
+            ) : null}
           </tbody>
         </table>
       </div>

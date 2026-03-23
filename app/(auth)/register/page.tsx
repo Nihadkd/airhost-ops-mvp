@@ -18,7 +18,7 @@ export default function RegisterPage() {
 
   useEffect(() => {
     if (status === "authenticated") {
-      router.replace("/dashboard");
+      router.replace("/");
     }
   }, [router, status]);
 
@@ -31,7 +31,6 @@ export default function RegisterPage() {
       email: String(formData.get("email")),
       phone: String(formData.get("phone")),
       password: String(formData.get("password")),
-      role: String(formData.get("role") || "UTLEIER"),
       acceptedTerms: formData.get("acceptedTerms") === "on",
     };
 
@@ -70,11 +69,6 @@ export default function RegisterPage() {
             {showPassword ? t("hidePassword") : t("showPassword")}
           </button>
         </div>
-        <select className="input" name="role" defaultValue="UTLEIER">
-          <option value="UTLEIER">{t("roleLandlordOnly")}</option>
-          <option value="TJENESTE">{t("roleWorkerOnly")}</option>
-          <option value="BEGGE">{t("roleBoth")}</option>
-        </select>
         <label className="flex items-start gap-2 rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700">
           <input className="mt-0.5" type="checkbox" name="acceptedTerms" required />
           <span>

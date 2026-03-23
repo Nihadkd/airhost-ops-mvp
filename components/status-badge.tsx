@@ -1,11 +1,17 @@
- "use client";
+"use client";
 
 import { useLanguage } from "@/lib/language-context";
 
-export function StatusBadge({ status }: { status: "PENDING" | "IN_PROGRESS" | "COMPLETED" }) {
+export function StatusBadge({
+  status,
+  className = "",
+}: {
+  status: "PENDING" | "IN_PROGRESS" | "COMPLETED";
+  className?: string;
+}) {
   const { t } = useLanguage();
 
-  if (status === "COMPLETED") return <span className="badge badge-completed">{t("statusCompleted")}</span>;
-  if (status === "IN_PROGRESS") return <span className="badge badge-progress">{t("statusInProgress")}</span>;
-  return <span className="badge badge-pending">{t("statusPending")}</span>;
+  if (status === "COMPLETED") return <span className={`badge badge-completed ${className}`.trim()}>{t("statusCompleted")}</span>;
+  if (status === "IN_PROGRESS") return <span className={`badge badge-progress ${className}`.trim()}>{t("statusInProgress")}</span>;
+  return <span className={`badge badge-pending ${className}`.trim()}>{t("statusPending")}</span>;
 }

@@ -25,8 +25,6 @@ export async function GET() {
           select: {
             landlordOrders: true,
             assignedOrders: true,
-            reviewsWritten: true,
-            reviewsReceived: true,
             pushTokens: true,
           },
         },
@@ -74,8 +72,6 @@ export async function POST(req: Request) {
           select: {
             landlordOrders: true,
             assignedOrders: true,
-            reviewsWritten: true,
-            reviewsReceived: true,
             pushTokens: true,
           },
         },
