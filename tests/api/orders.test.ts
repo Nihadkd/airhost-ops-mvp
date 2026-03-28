@@ -29,6 +29,7 @@ import { GET as listOrders, POST as createOrder } from "@/app/api/orders/route";
 import { GET as getOrder, PUT as updateOrder, DELETE as deleteOrder } from "@/app/api/orders/[id]/route";
 import { PUT as claimOrder } from "@/app/api/orders/[id]/claim/route";
 import { PUT as assignOrder } from "@/app/api/orders/[id]/assign/route";
+import { PUT as acceptAssignment } from "@/app/api/orders/[id]/assignment/accept/route";
 import { sendAssignedOrderSms } from "@/lib/sms";
 
 const validHalfHourIso = "2026-03-01T10:30:00.000Z";
@@ -591,6 +592,65 @@ describe("/api/orders", () => {
           orderId: "o1",
           path: "/orders/o1",
           type: "assignment_offered",
+        }),
+      }),
+    );
+  });
+
+  it("PUT /api/orders/[id]/assignment/accept confirms direct assignment without landlord approval", async () => {
+    vi.mocked(requireAuth).mockResolvedValue({
+      user: { id: "t1", name: "Worker 1", role: "TJENESTE", accountRole: "TJENESTE" },
+    } as never);
+    vi.mocked(prisma.serviceOrder.findUnique)
+      .mockResolvedValueOnce({
+        id: "o1",
+        orderNumber: 555,
+        landlordId: "l1",
+        assignedToId: "t1",
+        assignmentStatus: "PENDING_WORKER_ACCEPTANCE",
+        landlord: { id: "l1", name: "Landlord", email: "l@example.com" },
+        assignedTo: { id: "t1", name: "Worker 1", email: "worker@example.com" },
+      } as never)
+      .mockResolvedValueOnce({
+        id: "o1",
+        assignedToId: "t1",
+        assignmentStatus: "CONFIRMED",
+      } as never);
+    vi.mocked(prisma.serviceOrder.updateMany).mockResolvedValue({ count: 1 } as never);
+
+    const res = await acceptAssignment(new Request("http://localhost", { method: "PUT" }), {
+      params: Promise.resolve({ id: "o1" }),
+    });
+
+    expect(res.status).toBe(200);
+    expect(vi.mocked(prisma.serviceOrder.updateMany)).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          id: "o1",
+          assignedToId: "t1",
+          assignmentStatus: "PENDING_WORKER_ACCEPTANCE",
+        }),
+        data: expect.objectContaining({
+          assignmentStatus: "CONFIRMED",
+        }),
+      }),
+    );
+    expect(vi.mocked(prisma.notification.create)).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          userId: "l1",
+          actorUserId: "t1",
+          message: expect.stringContaining("bekreftet"),
+        }),
+      }),
+    );
+    expect(vi.mocked(sendPushToUser)).toHaveBeenCalledWith(
+      "l1",
+      expect.objectContaining({
+        data: expect.objectContaining({
+          orderId: "o1",
+          path: "/orders/o1",
+          type: "assignment_confirmed",
         }),
       }),
     );

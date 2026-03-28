@@ -1,4 +1,4 @@
-import { OrderStatus, ServiceType } from "@prisma/client";
+import { AssignmentStatus, OrderStatus, Prisma, ServiceType } from "@prisma/client";
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAuth } from "@/lib/rbac";
@@ -6,9 +6,11 @@ import { handleApiError } from "@/lib/api";
 import { derivePaymentStatus } from "@/lib/payments/order-payment";
 import { getStartAvailabilityForWorker } from "@/lib/services/order-start-service";
 
-type DashboardSort = "NEWEST_OLDEST" | "OLDEST_NEWEST" | "NEAREST";
+type DashboardSort = "NEWEST_OLDEST" | "OLDEST_NEWEST" | "NEAREST" | "DUE_SOON" | "RECENTLY_ASSIGNED";
 type DashboardView = "active" | "my" | "completed";
 type MyOrdersStatusFilter = "ongoing" | "completed" | "all";
+
+const QUICK_FILTER_WINDOW_DAYS = 7;
 
 export async function GET(req: Request) {
   try {
@@ -23,8 +25,20 @@ export async function GET(req: Request) {
     const sortParam = url.searchParams.get("sort");
     const viewParam = url.searchParams.get("view");
     const statusParam = url.searchParams.get("status");
-    const sort: DashboardSort =
-      sortParam === "OLDEST_NEWEST" || sortParam === "NEAREST" ? sortParam : "NEWEST_OLDEST";
+    const focusParam = url.searchParams.get("focus");
+    const sort: DashboardSort = (() => {
+      if (
+        sortParam === "OLDEST_NEWEST" ||
+        sortParam === "NEAREST" ||
+        sortParam === "DUE_SOON" ||
+        sortParam === "RECENTLY_ASSIGNED"
+      ) {
+        return sortParam;
+      }
+      if (focusParam === "due_soon") return "DUE_SOON";
+      if (focusParam === "recently_assigned") return "RECENTLY_ASSIGNED";
+      return "NEWEST_OLDEST";
+    })();
     const view: DashboardView = viewParam === "completed" ? "completed" : viewParam === "my" ? "my" : "active";
     const myStatus: MyOrdersStatusFilter =
       statusParam === "ongoing" || statusParam === "completed" ? statusParam : "all";
@@ -59,7 +73,7 @@ export async function GET(req: Request) {
               ? { assignedToId: session.user.id, status: myStatusWhere }
               : { assignedToId: null, status: OrderStatus.PENDING };
 
-    const searchWhere = search
+    const searchWhere: Prisma.ServiceOrderWhereInput | null = search
       ? {
           OR: [
             { address: { contains: search, mode: "insensitive" as const } },
@@ -74,8 +88,7 @@ export async function GET(req: Request) {
         }
       : null;
 
-    const where = searchWhere ? { AND: [visibilityWhere, searchWhere] } : visibilityWhere;
-    const dateWhere =
+    const dateWhere: Prisma.ServiceOrderWhereInput | null =
       dateParam && /^\d{4}-\d{2}-\d{2}$/.test(dateParam)
         ? {
             date: {
@@ -84,38 +97,75 @@ export async function GET(req: Request) {
             },
           }
         : null;
-    const whereWithDate = dateWhere
-      ? searchWhere
-        ? { AND: [visibilityWhere, searchWhere, dateWhere] }
-        : { AND: [visibilityWhere, dateWhere] }
-      : where;
+    const now = new Date();
+    const quickFilterWhere: Prisma.ServiceOrderWhereInput | null =
+      sort === "DUE_SOON"
+        ? {
+            status: { in: [OrderStatus.PENDING, OrderStatus.IN_PROGRESS] },
+            date: {
+              gte: now,
+              lte: new Date(now.getTime() + QUICK_FILTER_WINDOW_DAYS * 24 * 60 * 60 * 1000),
+            },
+          }
+        : sort === "RECENTLY_ASSIGNED"
+          ? {
+              status: { in: [OrderStatus.PENDING, OrderStatus.IN_PROGRESS] },
+              assignedToId: { not: null },
+              assignmentStatus: {
+                in: [
+                  AssignmentStatus.PENDING_WORKER_ACCEPTANCE,
+                  AssignmentStatus.PENDING_LANDLORD_APPROVAL,
+                  AssignmentStatus.CONFIRMED,
+                ],
+              },
+              // We do not store a separate assignment timestamp yet, so use the latest order update as the recent-assignment proxy.
+              updatedAt: {
+                gte: new Date(now.getTime() - QUICK_FILTER_WINDOW_DAYS * 24 * 60 * 60 * 1000),
+              },
+            }
+          : null;
+
+    const whereParts: Prisma.ServiceOrderWhereInput[] = [visibilityWhere];
+    if (searchWhere) whereParts.push(searchWhere);
+    if (dateWhere) whereParts.push(dateWhere);
+    if (quickFilterWhere) whereParts.push(quickFilterWhere);
+    const whereWithDate: Prisma.ServiceOrderWhereInput =
+      whereParts.length > 1 ? { AND: whereParts } : visibilityWhere;
     const forceWorkerMyOrdersByDate =
       !isAdmin && session.user.role === "TJENESTE" && view === "my";
-    const orderBy = forceWorkerMyOrdersByDate
-      ? [{ date: "asc" as const }, { createdAt: "asc" as const }]
-      : sort === "OLDEST_NEWEST"
+    const orderBy = sort === "RECENTLY_ASSIGNED"
+      ? [{ updatedAt: "desc" as const }, { date: "asc" as const }]
+      : sort === "DUE_SOON"
+        ? [{ date: "asc" as const }, { createdAt: "asc" as const }]
+      : forceWorkerMyOrdersByDate
+        ? [{ date: "asc" as const }, { createdAt: "asc" as const }]
+        : sort === "OLDEST_NEWEST"
         ? { createdAt: "asc" as const }
         : sort === "NEAREST"
-          ? { date: "asc" as const }
+          ? [{ date: "asc" as const }, { createdAt: "asc" as const }]
           : { createdAt: "desc" as const };
 
     const totalPromise = prisma.serviceOrder.count({ where: whereWithDate });
 
     const loadOrders = async (includeReceipt: boolean) => {
-      const rows = await prisma.serviceOrder.findMany({
-        where: whereWithDate,
-        include: {
-          landlord: { select: { id: true, name: true } },
-          assignedTo: { select: { id: true, name: true } },
-          ...(includeReceipt ? { receipt: { select: { amountNok: true } } } : {}),
+      const mapRow = async (
+        row: {
+          id: string;
+          orderNumber: number;
+          type: ServiceType;
+          address: string;
+          status: OrderStatus;
+          assignmentStatus: AssignmentStatus;
+          date: Date;
+          createdAt: Date;
+          updatedAt: Date;
+          assignedToId: string | null;
+          paymentIntent: string | null;
+          landlord: { id: string; name: string };
+          assignedTo: { id: string; name: string } | null;
         },
-        orderBy,
-        skip: (page - 1) * pageSize,
-        take: pageSize,
-      });
-
-      return Promise.all(rows.map(async (row) => {
-        const receipt = "receipt" in row ? row.receipt : null;
+        receiptAmountNok: number | null,
+      ) => {
         const startAvailability =
           session.user.role === "TJENESTE" &&
           view === "my" &&
@@ -139,10 +189,39 @@ export async function GET(req: Request) {
           canStart: startAvailability?.canStart ?? false,
           paymentStatus: derivePaymentStatus({
             paymentIntent: row.paymentIntent,
-            receiptAmountNok: receipt?.amountNok ?? null,
+            receiptAmountNok,
           }),
         };
-      }));
+      };
+
+      if (includeReceipt) {
+        const rows = await prisma.serviceOrder.findMany({
+          where: whereWithDate,
+          include: {
+            landlord: { select: { id: true, name: true } },
+            assignedTo: { select: { id: true, name: true } },
+            receipt: { select: { amountNok: true } },
+          },
+          orderBy,
+          skip: (page - 1) * pageSize,
+          take: pageSize,
+        });
+
+        return Promise.all(rows.map((row) => mapRow(row, row.receipt?.amountNok ?? null)));
+      }
+
+      const rows = await prisma.serviceOrder.findMany({
+        where: whereWithDate,
+        include: {
+          landlord: { select: { id: true, name: true } },
+          assignedTo: { select: { id: true, name: true } },
+        },
+        orderBy,
+        skip: (page - 1) * pageSize,
+        take: pageSize,
+      });
+
+      return Promise.all(rows.map((row) => mapRow(row, null)));
     };
 
     const ordersPromise = loadOrders(true).catch(async (receiptError) => {

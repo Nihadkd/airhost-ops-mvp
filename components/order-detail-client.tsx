@@ -88,11 +88,13 @@ export function OrderDetailClient({
   role,
   workers,
   currentUserId,
+  backHref,
 }: {
   initialOrder: Order;
   role: string;
   workers: Worker[];
   currentUserId: string;
+  backHref: string;
 }) {
   const router = useRouter();
   const [order, setOrder] = useState(initialOrder);
@@ -160,6 +162,7 @@ export function OrderDetailClient({
     order.landlord.email ? `mailto:${order.landlord.email}?subject=${encodeURIComponent(`Spørsmål om oppdrag ${order.id}`)}` : null;
   const workerMail =
     order.assignedTo?.email ? `mailto:${order.assignedTo.email}?subject=${encodeURIComponent(`Spørsmål om oppdrag ${order.id}`)}` : null;
+  const suggestedPaymentAmount = payment?.amountNok ?? (order.type === "KEY_HANDLING" ? 500 : 600);
 
   const isLandlordParticipant = order.landlord.id === currentUserId;
   const isWorkerParticipant = order.assignedTo?.id === currentUserId;
@@ -828,7 +831,7 @@ export function OrderDetailClient({
   };
 
   const issueReceipt = async () => {
-    const suggested = String(payment?.amountNok ?? (order.type === "KEY_HANDLING" ? 500 : 600));
+    const suggested = String(suggestedPaymentAmount);
     const raw = window.prompt(t("receiptAmountPrompt"), suggested);
     if (raw === null) return;
     const amountNok = Number(raw.trim());
@@ -854,14 +857,10 @@ export function OrderDetailClient({
   };
 
   const createPayment = async () => {
-    const suggested = String(payment?.amountNok ?? (order.type === "KEY_HANDLING" ? 500 : 600));
-    const raw = window.prompt(t("paymentAmountPrompt"), suggested);
-    if (raw === null) return;
-    const amountNok = Number(raw.trim());
-    if (!Number.isFinite(amountNok) || amountNok < 1) {
-      toast.error(t("invalidAmount"));
-      return;
-    }
+    const amountNok = Math.max(1, Math.floor(suggestedPaymentAmount));
+    const confirmKey = order.landlord.id === currentUserId ? "paymentCreateConfirm" : "paymentCreateConfirmWithReminder";
+    const confirmed = window.confirm(t(confirmKey).replace("{{amount}}", String(amountNok)));
+    if (!confirmed) return;
 
     setPaymentBusy(true);
     const res = await fetch(`/api/orders/${order.id}/payment`, {
@@ -874,8 +873,8 @@ export function OrderDetailClient({
       await showApiError(res);
       return;
     }
-    const payload = (await res.json().catch(() => null)) as { checkoutUrl?: string | null } | null;
-    toast.success(t("paymentCreated"));
+    const payload = (await res.json().catch(() => null)) as { checkoutUrl?: string | null; reminderSent?: boolean } | null;
+    toast.success(payload?.reminderSent ? t("paymentCreatedAndReminderSent") : t("paymentCreated"));
     if (payload?.checkoutUrl) {
       window.location.assign(payload.checkoutUrl);
       return;
@@ -884,7 +883,7 @@ export function OrderDetailClient({
   };
 
   const confirmPayment = async () => {
-    const suggested = String(payment?.amountNok ?? (order.type === "KEY_HANDLING" ? 500 : 600));
+    const suggested = String(suggestedPaymentAmount);
     const raw = window.prompt(t("paymentAmountPrompt"), suggested);
     if (raw === null) return;
     const amountNok = Number(raw.trim());
@@ -996,6 +995,9 @@ export function OrderDetailClient({
   return (
     <div className="space-y-4">
       <div className="panel p-4 sm:p-5">
+        <Link href={backHref} className="mb-3 inline-flex text-sm font-semibold text-teal-700 underline">
+          Tilbake
+        </Link>
         {typeof order.orderNumber === "number" && (
           <p className="mb-2 text-sm font-semibold text-slate-600">
             {t("orderIdNumber")}: <span className="text-slate-900">#{order.orderNumber}</span>
@@ -1351,7 +1353,7 @@ export function OrderDetailClient({
             <button className="btn btn-primary" disabled={assignSaving || assignmentStatus !== "UNASSIGNED"}>
               {assignSaving ? t("assigning") : t("assignAction")}
             </button>
-            {order.assignedTo && assignmentStatus !== "UNASSIGNED" ? (
+            {order.assignedTo && assignmentStatus === "CONFIRMED" ? (
               <button className="btn btn-secondary" type="button" disabled={assignSaving} onClick={() => void cancelAssignment()}>
                 {assignSaving ? t("saving") : t("cancelAssignmentAction")}
               </button>

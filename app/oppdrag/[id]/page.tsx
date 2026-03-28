@@ -1,10 +1,14 @@
 import Link from "next/link";
-import { notFound } from "next/navigation";
-import { auth } from "@/lib/auth";
-import { prisma } from "@/lib/prisma";
-import { splitOrderNote } from "@/lib/order-deadline";
-import { inferCity, inferCounty } from "@/lib/public-job-presentation";
 import { ServiceType } from "@prisma/client";
+import { notFound, redirect } from "next/navigation";
+import { auth } from "@/lib/auth";
+import { ShareJobButton } from "@/components/share-job-button";
+import { splitOrderNote } from "@/lib/order-deadline";
+import { assignmentStatuses } from "@/lib/order-assignment";
+import { prisma } from "@/lib/prisma";
+import { inferCity, inferCounty } from "@/lib/public-job-presentation";
+import { appendReturnTo, normalizeReturnTo } from "@/lib/return-to";
+import { resolveUserRole } from "@/lib/user-role";
 
 export const dynamic = "force-dynamic";
 
@@ -33,9 +37,17 @@ function getPublicServiceLabel(type: ServiceType) {
   }
 }
 
-export default async function PublicJobDetailPage({ params }: { params: Promise<{ id: string }> }) {
-  const { id } = await params;
+export default async function PublicJobDetailPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ id: string }>;
+  searchParams: Promise<{ returnTo?: string | string[] }>;
+}) {
+  const [{ id }, resolvedSearchParams] = await Promise.all([params, searchParams]);
   const session = await auth();
+  const resolved = session?.user?.id ? await resolveUserRole(session.user.id).catch(() => null) : null;
+  const returnTo = normalizeReturnTo(resolvedSearchParams.returnTo, "/#ledige-oppdrag");
   const job = await prisma.serviceOrder.findFirst({
     where: {
       id,
@@ -50,6 +62,10 @@ export default async function PublicJobDetailPage({ params }: { params: Promise<
       date: true,
       note: true,
       details: true,
+      status: true,
+      assignedToId: true,
+      assignmentStatus: true,
+      landlordId: true,
       landlord: { select: { name: true } },
     },
   });
@@ -58,7 +74,24 @@ export default async function PublicJobDetailPage({ params }: { params: Promise<
     notFound();
   }
 
+  const canOpenDirectly =
+    Boolean(session?.user?.id) &&
+    Boolean(
+      resolved &&
+        (session?.user?.role === "ADMIN" ||
+          resolved.role === "ADMIN" ||
+          (resolved.role === "UTLEIER" && job.landlordId === session?.user?.id) ||
+          (resolved.role === "TJENESTE" &&
+            (job.assignedToId === session?.user?.id ||
+              (job.assignedToId === null && job.status === "PENDING" && job.assignmentStatus === assignmentStatuses.UNASSIGNED)))),
+    );
+
+  if (canOpenDirectly) {
+    redirect(appendReturnTo(`/orders/${job.id}`, returnTo));
+  }
+
   const split = splitOrderNote(job.note);
+  const summary = split.note || job.note?.trim() || "Detaljer om oppdraget kommer her.";
   const details = job.details?.trim() || split.note || "";
   const typeLabel = getPublicServiceLabel(job.type);
   const city = inferCity(job.address);
@@ -68,7 +101,7 @@ export default async function PublicJobDetailPage({ params }: { params: Promise<
     <main className="min-h-screen bg-[linear-gradient(180deg,#f4fbfb_0%,#eff6f8_32%,#ffffff_100%)] px-4 pb-16 pt-6 sm:px-6 lg:px-8">
       <div className="mx-auto max-w-4xl">
         <header className="flex flex-wrap items-center justify-between gap-4 rounded-[28px] border border-white/70 bg-white/80 px-5 py-4 shadow-[0_24px_80px_rgba(10,45,61,0.10)] backdrop-blur sm:px-7">
-          <Link href="/" className="inline-flex items-center gap-3" aria-label="ServNest">
+          <Link href={returnTo} className="inline-flex items-center gap-3" aria-label="ServNest">
             <span className="inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-[linear-gradient(135deg,#0b8f7b,#12303d)] text-white shadow-lg">
               <svg width="22" height="22" viewBox="0 0 24 24" aria-hidden="true">
                 <path d="M4 11.8 12 5l8 6.8V20a1 1 0 0 1-1 1h-5v-6h-4v6H5a1 1 0 0 1-1-1z" fill="currentColor" />
@@ -79,9 +112,12 @@ export default async function PublicJobDetailPage({ params }: { params: Promise<
               <p className="text-xs font-semibold text-slate-500">Offentlig oppdrag</p>
             </div>
           </Link>
-          <Link href="/" className="btn btn-secondary">
-            Tilbake
-          </Link>
+          <div className="flex items-center gap-2">
+            <ShareJobButton urlPath={`/oppdrag/${job.id}`} />
+            <Link href={returnTo} className="btn btn-secondary">
+              Tilbake
+            </Link>
+          </div>
         </header>
 
         <section className="mt-6 rounded-[30px] border border-[#d7e7ea] bg-white px-6 py-7 shadow-[0_20px_60px_rgba(15,48,61,0.10)] sm:px-8">
@@ -92,9 +128,7 @@ export default async function PublicJobDetailPage({ params }: { params: Promise<
             <span className="text-sm font-semibold text-slate-500">#{job.orderNumber}</span>
           </div>
 
-          <h1 className="mt-5 text-3xl font-black leading-tight text-slate-900">
-            {split.note || details || "Detaljer om oppdraget kommer her."}
-          </h1>
+          <h1 className="mt-5 text-3xl font-black leading-tight text-slate-900">{summary}</h1>
 
           <div className="mt-5 grid gap-4 sm:grid-cols-3">
             <div className="rounded-2xl bg-slate-50 px-4 py-4">
@@ -133,7 +167,7 @@ export default async function PublicJobDetailPage({ params }: { params: Promise<
           <div className="mt-8 flex flex-wrap gap-3">
             {session?.user?.id ? (
               <>
-                <Link href={`/orders/${job.id}`} className="btn btn-primary">
+                <Link href={appendReturnTo(`/orders/${job.id}`, returnTo)} className="btn btn-primary">
                   Åpne oppdrag
                 </Link>
                 <Link href="/orders/new" className="btn btn-secondary">

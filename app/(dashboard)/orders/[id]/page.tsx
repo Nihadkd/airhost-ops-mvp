@@ -4,10 +4,17 @@ import { getStartAvailabilityForWorker } from "@/lib/services/order-start-servic
 import { resolveUserRole } from "@/lib/user-role";
 import { OrderDetailClient } from "@/components/order-detail-client";
 import { splitOrderNote } from "@/lib/order-deadline";
+import { normalizeReturnTo } from "@/lib/return-to";
 
-export default async function OrderDetailsPage({ params }: { params: Promise<{ id: string }> }) {
+export default async function OrderDetailsPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ id: string }>;
+  searchParams: Promise<{ returnTo?: string | string[] }>;
+}) {
   const session = await auth();
-  const { id } = await params;
+  const [{ id }, resolvedSearchParams] = await Promise.all([params, searchParams]);
 
   const order = await prisma.serviceOrder.findUnique({
     where: { id },
@@ -34,6 +41,8 @@ export default async function OrderDetailsPage({ params }: { params: Promise<{ i
   const resolved = await resolveUserRole(session.user.id);
   const role = resolved.role;
   const isAdminAccount = session.user.role === "ADMIN";
+  const defaultBackHref = role === "UTLEIER" || role === "ADMIN" ? "/orders/my" : "/#ledige-oppdrag";
+  const backHref = normalizeReturnTo(resolvedSearchParams.returnTo, defaultBackHref);
 
   const allowed =
     isAdminAccount ||
@@ -87,6 +96,7 @@ export default async function OrderDetailsPage({ params }: { params: Promise<{ i
       role={isAdminAccount ? "ADMIN" : role}
       workers={workersWithRating}
       currentUserId={session.user.id}
+      backHref={backHref}
     />
   );
 }

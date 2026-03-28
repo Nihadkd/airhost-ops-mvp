@@ -44,5 +44,9 @@ export function inferCounty(address: string) {
 
 export function inferCity(address: string) {
   const parts = address.split(",").map((part) => part.trim()).filter(Boolean);
-  return parts.at(-1) ?? address;
+  if (parts.length >= 2) {
+    return parts.at(-1) ?? address;
+  }
+
+  return inferCounty(address);
 }

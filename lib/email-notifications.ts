@@ -234,6 +234,22 @@ export async function sendWorkerAcceptedAssignmentEmail(input: {
   });
 }
 
+export async function sendAssignmentAcceptedByWorkerEmail(input: {
+  to: Recipient;
+  orderId: string;
+  orderNumber: number;
+  workerName: string;
+}) {
+  return sendEventMail({
+    to: input.to,
+    subject: `Tjenesteutfører har godtatt oppdrag #${input.orderNumber}`,
+    title: "Oppdraget er bekreftet",
+    body: `${input.workerName} har godtatt oppdrag #${input.orderNumber}. Oppdraget er nå bekreftet og klart for videre oppfølging.`,
+    ctaLabel: "Åpne oppdrag",
+    ctaUrl: orderUrl(input.orderId),
+  });
+}
+
 export async function sendAssignmentConfirmedEmail(input: {
   to: Recipient;
   orderId: string;

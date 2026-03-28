@@ -4,7 +4,7 @@ import { requireAuth } from "@/lib/rbac";
 import { apiError, handleApiError } from "@/lib/api";
 import { hasPaymentsEnabled } from "@/lib/env";
 import { createPaymentIntent, getPaymentProvider } from "@/lib/payments/provider";
-import { sendPaymentCreatedEmail } from "@/lib/email-notifications";
+import { sendPaymentReminderEmail } from "@/lib/email-notifications";
 import {
   buildStubPaymentIntentId,
   derivePaymentStatus,
@@ -100,8 +100,9 @@ export async function POST(req: Request, { params }: RouteContext) {
       data: { paymentIntent },
     });
     const actorIsLandlord = access.order.landlordId === session.user.id;
-    if (!actorIsLandlord) {
-      const message = `Betaling er opprettet for oppdrag #${access.order.orderNumber}.`;
+    const reminderSent = !actorIsLandlord;
+    if (reminderSent) {
+      const message = `Betalingspåminnelse: Oppdrag #${access.order.orderNumber} er klart for betaling.`;
       await notifyUserEvent({
         recipient: {
           userId: access.order.landlordId,
@@ -112,12 +113,12 @@ export async function POST(req: Request, { params }: RouteContext) {
         message,
         targetUrl: `/orders/${id}`,
         push: {
-          title: "Betaling opprettet",
+          title: "Betalingsvarsel",
           body: message,
-          data: { orderId: id, type: "payment_created", path: `/orders/${id}` },
+          data: { orderId: id, type: "payment_reminder", path: `/orders/${id}` },
         },
         email: () =>
-          sendPaymentCreatedEmail({
+          sendPaymentReminderEmail({
             to: { email: access.order.landlord.email, name: access.order.landlord.name },
             orderId: id,
             orderNumber: access.order.orderNumber,
@@ -131,6 +132,7 @@ export async function POST(req: Request, { params }: RouteContext) {
       amountNok,
       paymentIntent,
       checkoutUrl: intent.checkoutUrl ?? null,
+      reminderSent,
     });
   } catch (error) {
     return handleApiError(error);

@@ -1,8 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { usePathname } from "next/navigation";
 import { signOut } from "next-auth/react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { ShareJobButton } from "@/components/share-job-button";
 import { useLanguage } from "@/lib/language-context";
 
 type Me = {
@@ -19,9 +21,14 @@ export function TopNav({ initialMe }: { initialMe: Me }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
   const { t } = useLanguage();
+  const pathname = usePathname();
   const menuRef = useRef<HTMLDivElement | null>(null);
 
   const hasAdminAccess = me.accountRole === "ADMIN";
+  const shareableOrderId = useMemo(() => {
+    const match = pathname.match(/^\/orders\/([^/]+)$/);
+    return match?.[1] ?? null;
+  }, [pathname]);
   const menuItems = useMemo(
     () => [
       { href: "/orders/my", label: t("myOrdersMenu"), show: true },
@@ -106,46 +113,52 @@ export function TopNav({ initialMe }: { initialMe: Me }) {
           </div>
         </Link>
 
-        <div className="relative" ref={menuRef}>
-          <button
-            className="btn btn-secondary px-3"
-            onClick={() => setMenuOpen((prev) => !prev)}
-            aria-label={t("menu")}
-            title={t("menu")}
-          >
-            <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
-              <circle cx="8" cy="3" r="1.5" fill="currentColor" />
-              <circle cx="8" cy="8" r="1.5" fill="currentColor" />
-              <circle cx="8" cy="13" r="1.5" fill="currentColor" />
-            </svg>
-          </button>
-          {menuOpen && (
-            <div className="absolute right-0 z-50 mt-2 w-72 rounded-xl border border-slate-200 bg-white p-3 shadow-lg">
-              <p className="mb-2 text-xs uppercase tracking-wide text-slate-500">{t("menu")}</p>
-              <nav className="space-y-1">
-                {menuItems.filter((item) => item.show).map((item) => (
-                  <Link
-                    key={item.href}
-                    href={item.href}
-                    onClick={() => setMenuOpen(false)}
-                    className="flex items-center justify-between rounded-lg px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100"
-                  >
-                    <span>{item.label}</span>
-                    {item.href === "/messages" && unreadCount > 0 ? (
-                      <span className="inline-flex min-w-[22px] items-center justify-center rounded-full bg-teal-700 px-2 py-0.5 text-xs font-bold text-white">
-                        {unreadCount}
-                      </span>
-                    ) : null}
-                  </Link>
-                ))}
-              </nav>
-              <div className="mt-3 border-t border-slate-200 pt-3">
-                <button className="btn btn-danger w-full" onClick={() => signOut({ callbackUrl: "/login" })}>
-                  {t("logout")}
-                </button>
+        <div className="flex items-center gap-2">
+          {shareableOrderId ? (
+            <ShareJobButton urlPath={`/oppdrag/${shareableOrderId}`} />
+          ) : null}
+
+          <div className="relative" ref={menuRef}>
+            <button
+              className="btn btn-secondary px-3"
+              onClick={() => setMenuOpen((prev) => !prev)}
+              aria-label={t("menu")}
+              title={t("menu")}
+            >
+              <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
+                <circle cx="8" cy="3" r="1.5" fill="currentColor" />
+                <circle cx="8" cy="8" r="1.5" fill="currentColor" />
+                <circle cx="8" cy="13" r="1.5" fill="currentColor" />
+              </svg>
+            </button>
+            {menuOpen && (
+              <div className="absolute right-0 z-50 mt-2 w-72 rounded-xl border border-slate-200 bg-white p-3 shadow-lg">
+                <p className="mb-2 text-xs uppercase tracking-wide text-slate-500">{t("menu")}</p>
+                <nav className="space-y-1">
+                  {menuItems.filter((item) => item.show).map((item) => (
+                    <Link
+                      key={item.href}
+                      href={item.href}
+                      onClick={() => setMenuOpen(false)}
+                      className="flex items-center justify-between rounded-lg px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100"
+                    >
+                      <span>{item.label}</span>
+                      {item.href === "/messages" && unreadCount > 0 ? (
+                        <span className="inline-flex min-w-[22px] items-center justify-center rounded-full bg-teal-700 px-2 py-0.5 text-xs font-bold text-white">
+                          {unreadCount}
+                        </span>
+                      ) : null}
+                    </Link>
+                  ))}
+                </nav>
+                <div className="mt-3 border-t border-slate-200 pt-3">
+                  <button className="btn btn-danger w-full" onClick={() => signOut({ callbackUrl: "/login" })}>
+                    {t("logout")}
+                  </button>
+                </div>
               </div>
-            </div>
-          )}
+            )}
+          </div>
         </div>
       </div>
     </header>

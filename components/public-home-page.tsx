@@ -1,10 +1,13 @@
 "use client";
 
 import Link from "next/link";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { signOut } from "next-auth/react";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { PublicSiteFooter } from "@/components/public-site-footer";
 import { useLanguage } from "@/lib/language-context";
 import { inferCity, inferCounty, NORWEGIAN_COUNTIES } from "@/lib/public-job-presentation";
+import { appendReturnTo } from "@/lib/return-to";
 import { getServiceTypeTranslationKey, ORDERABLE_SERVICE_TYPES } from "@/lib/service-types";
 
 type PublicJob = {
@@ -23,15 +26,41 @@ type Me = {
 };
 
 type SortMode = "SOONEST" | "NEWEST" | "OLDEST";
+const DEFAULT_QUERY = "";
+const DEFAULT_TYPE = "ALL";
+const DEFAULT_COUNTY: (typeof NORWEGIAN_COUNTIES)[number] = "Alle fylker";
+const DEFAULT_SORT_MODE: SortMode = "SOONEST";
+
+function parseQueryParam(value: string | null) {
+  return value?.trim() ?? DEFAULT_QUERY;
+}
+
+function parseTypeParam(value: string | null) {
+  if (value === DEFAULT_TYPE) {
+    return DEFAULT_TYPE;
+  }
+
+  return value && ORDERABLE_SERVICE_TYPES.includes(value as (typeof ORDERABLE_SERVICE_TYPES)[number]) ? value : DEFAULT_TYPE;
+}
+
+function parseCountyParam(value: string | null) {
+  return value && (NORWEGIAN_COUNTIES as readonly string[]).includes(value)
+    ? (value as (typeof NORWEGIAN_COUNTIES)[number])
+    : DEFAULT_COUNTY;
+}
+
+function parseSortParam(value: string | null): SortMode {
+  return value === "NEWEST" || value === "OLDEST" || value === "SOONEST" ? value : DEFAULT_SORT_MODE;
+}
 
 function CategoryIcon({ type }: { type: string }) {
-  const iconClassName = "h-5 w-5";
+  const iconClassName = "h-6 w-6 sm:h-7 sm:w-7";
 
   switch (type) {
     case "CLEANING":
       return (
         <svg className={iconClassName} viewBox="0 0 24 24" aria-hidden="true">
-          <path d="M7 4h8l1 5H8l-1-5Zm2 7h6l1 8H8l1-8Zm1.5 2.5v3m3-3v3" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+          <path d="M8.5 4h6.8l4.2.5v2l-2.8.4v.9l-2.7.2 1.2 2.2c.6 1.2.9 2.4.9 3.7v5.8l-1 1H8.8l-1-.9v-6c0-1.4.3-2.7.9-3.9l1.6-3V6.5H8.5V4Zm2.4 2.2h3.8m-3 11.3h.1m-.1-7.8c-.5.9-.8 1.9-.8 2.9v5.6m5.2-7.9c.4.9.6 1.8.6 2.8v5.2" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
         </svg>
       );
     case "MOVING_CARRYING":
@@ -55,7 +84,15 @@ function CategoryIcon({ type }: { type: string }) {
     case "SMALL_REPAIRS":
       return (
         <svg className={iconClassName} viewBox="0 0 24 24" aria-hidden="true">
-          <path d="M14 5a4 4 0 0 0 5 5l-8.5 8.5a2.1 2.1 0 1 1-3-3L16 7a4 4 0 0 0-2-2Z" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+          <path
+            d="M14.8 5.2a3.8 3.8 0 0 0-4.7 4.7l-5.4 5.4a1.5 1.5 0 1 0 2.1 2.1l5.4-5.4a3.8 3.8 0 0 0 4.7-4.7l-2 2-2.2-2.2 2.1-1.9Z"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.8"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+          <circle cx="6.1" cy="17.9" r="0.9" fill="currentColor" />
         </svg>
       );
     case "PET_CARE":
@@ -67,7 +104,7 @@ function CategoryIcon({ type }: { type: string }) {
     case "TECHNICAL_HELP":
       return (
         <svg className={iconClassName} viewBox="0 0 24 24" aria-hidden="true">
-          <path d="M8 5h8m-7 4h6m-8 4h10m-9 4h8M5 5h.01M5 9h.01M5 13h.01M5 17h.01" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+          <path d="M12 8.5a3.5 3.5 0 1 0 0 7 3.5 3.5 0 0 0 0-7Zm7 3-1.4-.4a5.9 5.9 0 0 0-.6-1.4l.7-1.3-1.4-1.4-1.3.7a5.9 5.9 0 0 0-1.4-.6L12.5 5h-2l-.4 1.4a5.9 5.9 0 0 0-1.4.6l-1.3-.7L6 7.7l.7 1.3a5.9 5.9 0 0 0-.6 1.4L4.7 12l.4 2 1.4.4c.1.5.3 1 .6 1.4L6.4 17l1.4 1.4 1.3-.7c.4.3.9.5 1.4.6l.4 1.4h2l.4-1.4c.5-.1 1-.3 1.4-.6l1.3.7 1.4-1.4-.7-1.3c.3-.4.5-.9.6-1.4l1.4-.4.1-2Z" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
         </svg>
       );
     case "KEY_HANDLING":
@@ -94,16 +131,43 @@ export function PublicHomePage({
   isAuthenticated?: boolean;
   me?: Me | null;
 }) {
-  const [query, setQuery] = useState("");
-  const [selectedType, setSelectedType] = useState<string>("ALL");
-  const [selectedCounty, setSelectedCounty] = useState<string>("Alle fylker");
-  const [sortMode, setSortMode] = useState<SortMode>("SOONEST");
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const [query, setQuery] = useState(() => parseQueryParam(searchParams.get("q")));
+  const [selectedType, setSelectedType] = useState<string>(() => parseTypeParam(searchParams.get("type")));
+  const [selectedCounty, setSelectedCounty] = useState<string>(() => parseCountyParam(searchParams.get("county")));
+  const [sortMode, setSortMode] = useState<SortMode>(() => parseSortParam(searchParams.get("sort")));
   const [menuOpen, setMenuOpen] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
   const { t, lang } = useLanguage();
   const locale = lang === "no" ? "nb-NO" : "en-GB";
   const menuRef = useRef<HTMLDivElement | null>(null);
   const hasAdminAccess = me?.accountRole === "ADMIN";
+  const canOpenJobDirectly =
+    isAuthenticated && Boolean(me && (me.accountRole === "ADMIN" || me.effectiveRole === "ADMIN" || me.effectiveRole === "TJENESTE"));
+  const currentListHref = useMemo(() => {
+    const nextParams = new URLSearchParams();
+    const normalizedQuery = query.trim();
+
+    if (normalizedQuery) {
+      nextParams.set("q", normalizedQuery);
+    }
+    if (selectedType !== DEFAULT_TYPE) {
+      nextParams.set("type", selectedType);
+    }
+    if (selectedCounty !== DEFAULT_COUNTY) {
+      nextParams.set("county", selectedCounty);
+    }
+    if (sortMode !== DEFAULT_SORT_MODE) {
+      nextParams.set("sort", sortMode);
+    }
+
+    const nextSearch = nextParams.toString();
+    return `${pathname}${nextSearch ? `?${nextSearch}` : ""}#ledige-oppdrag`;
+  }, [pathname, query, selectedCounty, selectedType, sortMode]);
+  const getJobHref = (jobId: string) =>
+    appendReturnTo(canOpenJobDirectly ? `/orders/${jobId}` : `/oppdrag/${jobId}`, currentListHref);
 
   const categories = useMemo(() => {
     return ORDERABLE_SERVICE_TYPES.map((type) => {
@@ -177,6 +241,54 @@ export function PublicHomePage({
   );
 
   useEffect(() => {
+    const nextQuery = parseQueryParam(searchParams.get("q"));
+    const nextType = parseTypeParam(searchParams.get("type"));
+    const nextCounty = parseCountyParam(searchParams.get("county"));
+    const nextSort = parseSortParam(searchParams.get("sort"));
+
+    setQuery((current) => (current === nextQuery ? current : nextQuery));
+    setSelectedType((current) => (current === nextType ? current : nextType));
+    setSelectedCounty((current) => (current === nextCounty ? current : nextCounty));
+    setSortMode((current) => (current === nextSort ? current : nextSort));
+  }, [searchParams]);
+
+  useEffect(() => {
+    const nextParams = new URLSearchParams(searchParams.toString());
+    const normalizedQuery = query.trim();
+
+    if (normalizedQuery) {
+      nextParams.set("q", normalizedQuery);
+    } else {
+      nextParams.delete("q");
+    }
+
+    if (selectedType !== DEFAULT_TYPE) {
+      nextParams.set("type", selectedType);
+    } else {
+      nextParams.delete("type");
+    }
+
+    if (selectedCounty !== DEFAULT_COUNTY) {
+      nextParams.set("county", selectedCounty);
+    } else {
+      nextParams.delete("county");
+    }
+
+    if (sortMode !== DEFAULT_SORT_MODE) {
+      nextParams.set("sort", sortMode);
+    } else {
+      nextParams.delete("sort");
+    }
+
+    const currentSearch = searchParams.toString();
+    const nextSearch = nextParams.toString();
+
+    if (currentSearch !== nextSearch) {
+      router.replace(nextSearch ? `${pathname}?${nextSearch}` : pathname, { scroll: false });
+    }
+  }, [pathname, query, router, searchParams, selectedCounty, selectedType, sortMode]);
+
+  useEffect(() => {
     if (!menuOpen) return;
     const onClickAway = (event: MouseEvent) => {
       if (!menuRef.current?.contains(event.target as Node)) {
@@ -223,9 +335,9 @@ export function PublicHomePage({
   }, [isAuthenticated]);
 
   return (
-    <main className="min-h-screen bg-[linear-gradient(180deg,#f4fbfb_0%,#eff6f8_32%,#ffffff_100%)] px-4 pb-16 pt-6 sm:px-6 lg:px-8">
+    <main className="min-h-screen bg-[linear-gradient(180deg,#f4fbfb_0%,#eff6f8_32%,#ffffff_100%)] px-3 pb-12 pt-4 sm:px-6 sm:pb-16 sm:pt-6 lg:px-8">
       <div className="mx-auto max-w-6xl">
-        <header className="relative z-[80] flex flex-wrap items-center justify-between gap-4 rounded-[28px] border border-white/70 bg-white/80 px-5 py-4 shadow-[0_24px_80px_rgba(10,45,61,0.10)] backdrop-blur sm:px-7">
+        <header className="relative z-[80] flex flex-wrap items-center justify-between gap-3 rounded-[24px] border border-white/70 bg-white/80 px-4 py-3 shadow-[0_24px_80px_rgba(10,45,61,0.10)] backdrop-blur sm:gap-4 sm:rounded-[28px] sm:px-7 sm:py-4">
           <Link href="/" className="inline-flex items-center gap-3" aria-label="ServNest">
             <span className="inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-[linear-gradient(135deg,#0b8f7b,#12303d)] text-white shadow-lg">
               <svg width="22" height="22" viewBox="0 0 24 24" aria-hidden="true">
@@ -293,26 +405,26 @@ export function PublicHomePage({
           )}
         </header>
 
-        <section className="relative mt-6 overflow-hidden rounded-[36px] border border-[#d7e7ea] bg-[radial-gradient(circle_at_top,#f8fffd_0%,#ecf6f7_40%,#f8fbfc_100%)] px-6 py-8 shadow-[0_28px_90px_rgba(15,48,61,0.12)] sm:px-10 sm:py-12">
+        <section className="relative mt-4 overflow-hidden rounded-[28px] border border-[#d7e7ea] bg-[radial-gradient(circle_at_top,#f8fffd_0%,#ecf6f7_40%,#f8fbfc_100%)] px-4 py-5 shadow-[0_28px_90px_rgba(15,48,61,0.12)] sm:mt-6 sm:rounded-[36px] sm:px-10 sm:py-12">
           <div className="absolute -right-16 top-8 h-40 w-40 rounded-full bg-teal-200/35 blur-3xl" aria-hidden="true" />
           <div className="absolute -left-10 bottom-0 h-32 w-32 rounded-full bg-sky-200/30 blur-3xl" aria-hidden="true" />
 
-          <div className="grid gap-8 lg:grid-cols-[1.3fr_0.9fr] lg:items-center">
+          <div className="grid gap-5 lg:grid-cols-[1.3fr_0.9fr] lg:items-center lg:gap-8">
             <div>
               <p className="text-xs font-black uppercase tracking-[0.28em] text-teal-700">Lokale oppdrag. Rask hjelp. Trygg flyt.</p>
-              <h1 className="mt-4 max-w-3xl text-4xl font-black leading-[0.98] text-slate-900 sm:text-[4.1rem]">
+              <h1 className="mt-3 max-w-3xl text-[2.35rem] font-black leading-[0.98] text-slate-900 sm:mt-4 sm:text-[4.1rem]">
                 Hjelp og oppdrag, samlet på ett sted
               </h1>
-              <p className="mt-5 max-w-2xl text-base leading-7 text-slate-600 sm:text-lg">
+              <p className="mt-3 max-w-2xl text-[0.98rem] leading-7 text-slate-600 sm:mt-5 sm:text-lg">
                 Fra små oppdrag til større behov, ServNest kobler folk som trenger hjelp med folk som kan hjelpe.
               </p>
 
               <label htmlFor="public-search" className="sr-only">
                 Søk etter oppdrag
               </label>
-              <div className="mt-7 max-w-4xl">
-                <div className="panel flex items-center gap-3 rounded-[28px] border border-white/80 bg-white/96 px-4 py-3 shadow-[0_24px_60px_rgba(11,143,123,0.10)] sm:px-6 sm:py-5">
-                  <span className="inline-flex h-11 w-11 items-center justify-center rounded-2xl bg-teal-50 text-teal-700">
+              <div className="mt-5 max-w-4xl sm:mt-7">
+                <div className="panel flex items-center gap-3 rounded-[22px] border border-white/80 bg-white/96 px-3 py-2.5 shadow-[0_24px_60px_rgba(11,143,123,0.10)] sm:rounded-[28px] sm:px-6 sm:py-5">
+                  <span className="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-teal-50 text-teal-700 sm:h-11 sm:w-11 sm:rounded-2xl">
                     <svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true">
                       <path d="M21 21l-4.35-4.35m1.85-5.15a7 7 0 1 1-14 0 7 7 0 0 1 14 0Z" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
                     </svg>
@@ -323,12 +435,12 @@ export function PublicHomePage({
                     value={query}
                     onChange={(event) => setQuery(event.target.value)}
                     placeholder="Søk etter ledige oppdrag, sted eller tjeneste"
-                    className="w-full border-0 bg-transparent text-lg font-semibold text-slate-900 outline-none placeholder:text-slate-400 sm:text-[1.35rem]"
+                    className="w-full border-0 bg-transparent text-base font-semibold text-slate-900 outline-none placeholder:text-slate-400 sm:text-[1.35rem]"
                   />
                 </div>
               </div>
 
-              <div className="mt-6 flex flex-wrap items-center gap-3">
+              <div className="mt-4 flex flex-wrap items-center gap-2.5 sm:mt-6 sm:gap-3">
                 <Link href="#ledige-oppdrag" className="btn btn-secondary px-6">
                   Finn oppdrag
                 </Link>
@@ -336,29 +448,28 @@ export function PublicHomePage({
                   Legg ut jobb
                 </Link>
               </div>
-              <p className="mt-3 text-sm font-medium text-slate-500">
-                {isAuthenticated
-                  ? "Du er innlogget og kan ta oppdrag eller legge ut nye jobber."
-                  : "Innlogging kreves når du skal legge ut eller påta deg en jobb."}
-              </p>
+              <Link href="/tjenester" className="mt-3 inline-flex text-sm font-black text-teal-700 underline underline-offset-4">
+                Se alle tjenestene vi dekker
+              </Link>
+              {!isAuthenticated ? (
+                <p className="mt-2 text-sm font-medium text-slate-500 sm:mt-3">
+                  Innlogging kreves når du skal legge ut eller påta deg en jobb.
+                </p>
+              ) : null}
             </div>
 
-            <div className="grid gap-4">
-              <div className="rounded-[30px] border border-white/80 bg-[linear-gradient(180deg,rgba(15,48,61,0.97),rgba(11,143,123,0.94))] p-6 text-white shadow-[0_26px_60px_rgba(15,48,61,0.18)]">
+            <div className="grid gap-3 sm:gap-4">
+              <div className="rounded-[24px] border border-white/80 bg-[linear-gradient(180deg,rgba(15,48,61,0.97),rgba(11,143,123,0.94))] p-4 text-white shadow-[0_26px_60px_rgba(15,48,61,0.18)] sm:rounded-[30px] sm:p-6">
                 <p className="text-[11px] font-black uppercase tracking-[0.24em] text-white/65">Slik fungerer det</p>
-                <div className="mt-5 space-y-4">
+                <div className="mt-4 space-y-3 sm:mt-5 sm:space-y-4">
                   {[
-                    { step: "01", title: "Søk eller filtrer", text: "Finn oppdrag etter kategori, område eller tidspunkt." },
-                    { step: "02", title: "Velg riktig oppdrag", text: "Se detaljer før du bestemmer deg for å gå videre." },
-                    { step: "03", title: "Logg inn når du handler", text: "Innlogging kreves først når du vil ta eller legge ut jobb." },
+                    { title: "Søk eller filtrer", text: "Finn oppdrag etter kategori, område eller tidspunkt." },
+                    { title: "Velg riktig oppdrag", text: "Se detaljer før du bestemmer deg for å gå videre." },
+                    { title: "Logg inn når du handler", text: "Innlogging kreves først når du vil ta eller legge ut jobb." },
                   ].map((item) => (
-                    <div key={item.step} className="flex gap-4 rounded-[22px] border border-white/10 bg-white/8 px-4 py-4 backdrop-blur">
-                      <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-white/12 text-sm font-black">
-                        {item.step}
-                      </div>
+                    <div key={item.title} className="rounded-[18px] border border-white/10 bg-white/8 px-3 py-3 backdrop-blur sm:rounded-[22px] sm:px-4 sm:py-4">
                       <div>
-                        <p className="text-sm font-black text-white">{item.title}</p>
-                        <p className="mt-1 text-sm leading-6 text-white/72">{item.text}</p>
+                        <p className="text-[18px] font-black text-white sm:text-[20px]">{item.title}</p>
                       </div>
                     </div>
                   ))}
@@ -368,41 +479,41 @@ export function PublicHomePage({
           </div>
         </section>
 
-        <section className="mt-6">
+        <section className="mt-5 sm:mt-6">
           <div>
             <p className="text-xs font-black uppercase tracking-[0.24em] text-teal-700">Kategorier</p>
             <h2 className="mt-2 text-2xl font-black text-slate-900">Utforsk tjenester etter behov</h2>
           </div>
 
-          <div className="mt-4 grid gap-1.5 sm:grid-cols-2 lg:grid-cols-5 xl:grid-cols-6">
+          <div className="mt-3 grid gap-1.5 sm:mt-4 sm:grid-cols-2 lg:grid-cols-5 xl:grid-cols-6">
             <button
               type="button"
               onClick={() => setSelectedType("ALL")}
-              className={`rounded-[16px] border px-3 py-2.5 text-left transition ${
+              className={`rounded-[14px] border px-2.5 py-2 text-left transition sm:rounded-[16px] sm:px-3 sm:py-2.5 ${
                 selectedType === "ALL"
                   ? "border-slate-900 bg-slate-900 text-white shadow-[0_18px_36px_rgba(15,23,42,0.18)]"
                   : "border-white/80 bg-white/90 text-slate-700 shadow-[0_16px_32px_rgba(15,48,61,0.07)] hover:border-teal-300 hover:text-teal-700"
               }`}
             >
-              <span className={`inline-flex h-11 w-11 items-center justify-center rounded-[18px] ${selectedType === "ALL" ? "bg-white/12" : "bg-slate-100"}`}>
-                <svg className="h-5.5 w-5.5" viewBox="0 0 24 24" aria-hidden="true">
+              <span className={`inline-flex h-11 w-11 items-center justify-center rounded-[16px] sm:h-12 sm:w-12 sm:rounded-[18px] ${selectedType === "ALL" ? "bg-white/12 text-white" : "bg-teal-100 text-teal-950 ring-1 ring-teal-200"}`}>
+                <svg className="h-6 w-6 sm:h-7 sm:w-7" viewBox="0 0 24 24" aria-hidden="true">
                   <path d="M4 12h16M12 4v16" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
                 </svg>
               </span>
-              <p className="mt-1.5 text-[0.92rem] font-black">Alle tjenester</p>
-              <p className={`mt-0.5 text-[0.8rem] ${selectedType === "ALL" ? "text-white/78" : "text-slate-500"}`}>Se hele markedet</p>
+              <p className="mt-1 text-[0.86rem] font-black sm:mt-1.5 sm:text-[0.92rem]">Alle tjenester</p>
+              <p className={`mt-0.5 text-[0.74rem] sm:text-[0.8rem] ${selectedType === "ALL" ? "text-white/78" : "text-slate-500"}`}>Se hele markedet</p>
             </button>
             {categories.map((category) =>
               category.type === "KEY_HANDLING" ? (
                 <Link
                   key={category.type}
                   href="/airbnb"
-                  className="rounded-[16px] border border-white/80 bg-white/90 px-3 py-2.5 text-left text-slate-700 shadow-[0_16px_32px_rgba(15,48,61,0.07)] transition hover:border-teal-300 hover:text-teal-700"
+                  className="rounded-[14px] border border-white/80 bg-white/90 px-2.5 py-2 text-left text-slate-700 shadow-[0_16px_32px_rgba(15,48,61,0.07)] transition hover:border-teal-300 hover:text-teal-700 sm:rounded-[16px] sm:px-3 sm:py-2.5"
                 >
-                  <span className="inline-flex h-11 w-11 items-center justify-center rounded-[18px] bg-slate-100">
+                  <span className="inline-flex h-11 w-11 items-center justify-center rounded-[16px] bg-teal-100 text-teal-950 ring-1 ring-teal-200 sm:h-12 sm:w-12 sm:rounded-[18px]">
                     <CategoryIcon type={category.type} />
                   </span>
-                  <p className="mt-1.5 text-[0.92rem] font-black">{category.label}</p>
+                  <p className="mt-1 text-[0.86rem] font-black sm:mt-1.5 sm:text-[0.92rem]">{category.label}</p>
                   <p className="mt-1 text-sm text-slate-500">Åpne Airbnb-siden</p>
                 </Link>
               ) : (
@@ -410,33 +521,43 @@ export function PublicHomePage({
                   key={category.type}
                   type="button"
                   onClick={() => setSelectedType(category.type)}
-                  className={`rounded-[16px] border px-3 py-2.5 text-left transition ${
+                  className={`rounded-[14px] border px-2.5 py-2 text-left transition sm:rounded-[16px] sm:px-3 sm:py-2.5 ${
                     selectedType === category.type
                       ? "border-teal-700 bg-teal-700 text-white shadow-[0_18px_36px_rgba(11,143,123,0.18)]"
                       : "border-white/80 bg-white/90 text-slate-700 shadow-[0_16px_32px_rgba(15,48,61,0.07)] hover:border-teal-300 hover:text-teal-700"
                   }`}
                 >
-                  <span className={`inline-flex h-11 w-11 items-center justify-center rounded-[18px] ${selectedType === category.type ? "bg-white/12" : "bg-slate-100"}`}>
+                  <span className={`inline-flex h-11 w-11 items-center justify-center rounded-[16px] sm:h-12 sm:w-12 sm:rounded-[18px] ${selectedType === category.type ? "bg-white/12 text-white" : "bg-teal-100 text-teal-950 ring-1 ring-teal-200"}`}>
                     <CategoryIcon type={category.type} />
                   </span>
-                  <p className="mt-1.5 text-[0.92rem] font-black">{category.label}</p>
-                  <p className={`mt-0.5 text-[0.8rem] ${selectedType === category.type ? "text-white/80" : "text-slate-500"}`}>
+                  <p className="mt-1 text-[0.86rem] font-black sm:mt-1.5 sm:text-[0.92rem]">{category.label}</p>
+                  <p className={`mt-0.5 text-[0.74rem] sm:text-[0.8rem] ${selectedType === category.type ? "text-white/80" : "text-slate-500"}`}>
                     Filtrer oppdrag i denne kategorien
                   </p>
                 </button>
               ),
             )}
           </div>
+
+          <div className="mt-4 rounded-[20px] border border-white/80 bg-white/90 px-4 py-4 shadow-[0_16px_32px_rgba(15,48,61,0.07)] sm:px-5">
+            <p className="text-sm text-slate-600">
+              Vil du lese mer om hver tjeneste? Vi har laget egne sider for blant annet sma reparasjoner, rengjoring,
+              flyttehjelp, hagearbeid og Airbnb-tjenester.
+            </p>
+            <Link href="/tjenester" className="mt-3 inline-flex text-sm font-black text-teal-700 underline underline-offset-4">
+              Gå til tjenestesidene
+            </Link>
+          </div>
         </section>
 
-        <section id="ledige-oppdrag" className="mt-8 scroll-mt-24">
+        <section id="ledige-oppdrag" className="mt-6 scroll-mt-24 sm:mt-8">
           <div className="mb-4 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
             <div>
               <p className="text-xs font-black uppercase tracking-[0.24em] text-teal-700">Ledige oppdrag</p>
               <h2 className="mt-2 text-3xl font-black text-slate-900">Oppdrag folk trenger hjelp med nå</h2>
             </div>
             <details className="group relative lg:min-w-[180px]">
-              <summary className="flex h-14 cursor-pointer list-none items-center justify-between rounded-[18px] border border-slate-300 bg-white px-4 py-3 text-left shadow-[0_12px_30px_rgba(15,48,61,0.08)] transition marker:content-none hover:border-teal-400">
+              <summary className="flex h-12 cursor-pointer list-none items-center justify-between rounded-[16px] border border-slate-300 bg-white px-4 py-2.5 text-left shadow-[0_12px_30px_rgba(15,48,61,0.08)] transition marker:content-none hover:border-teal-400 sm:h-14 sm:rounded-[18px] sm:py-3">
                 <div>
                   <p className="text-lg font-semibold text-slate-900">Filter</p>
                 </div>
@@ -456,7 +577,7 @@ export function PublicHomePage({
                 </svg>
               </summary>
 
-              <div className="absolute right-0 z-20 mt-3 grid w-full gap-3 rounded-[22px] border border-white/80 bg-white p-4 shadow-[0_18px_40px_rgba(15,48,61,0.14)] backdrop-blur sm:w-[320px]">
+              <div className="absolute right-0 z-20 mt-3 grid w-full gap-3 rounded-[18px] border border-white/80 bg-white p-3 shadow-[0_18px_40px_rgba(15,48,61,0.14)] backdrop-blur sm:w-[320px] sm:rounded-[22px] sm:p-4">
                 <label className="flex flex-col gap-2 text-left">
                   <span className="text-[11px] font-black uppercase tracking-[0.22em] text-slate-500">Område</span>
                   <select
@@ -493,16 +614,14 @@ export function PublicHomePage({
               <div className="hidden lg:block">
                 <table className="w-full table-fixed text-left">
                   <colgroup>
-                    <col className="w-[10%]" />
-                    <col className="w-[18%]" />
-                    <col className="w-[28%]" />
-                    <col className="w-[12%]" />
+                    <col className="w-[20%]" />
+                    <col className="w-[30%]" />
                     <col className="w-[14%]" />
-                    <col className="w-[18%]" />
+                    <col className="w-[14%]" />
+                    <col className="w-[22%]" />
                   </colgroup>
                   <thead>
-                    <tr className="border-b border-teal-200 text-[0.82rem] font-semibold text-slate-900">
-                      <th className="pb-1.5 pr-4">ID-nummer</th>
+                    <tr className="text-[0.82rem] font-semibold text-slate-900">
                       <th className="pb-1.5 pr-4">Type</th>
                       <th className="pb-1.5 pr-4">Adresse</th>
                       <th className="pb-1.5 pr-4">Område</th>
@@ -517,32 +636,36 @@ export function PublicHomePage({
                       const note = job.note?.trim() || "Se oppdragsdetaljene for full beskrivelse.";
 
                       return (
-                        <tr
-                          key={job.id}
-                          className="cursor-pointer border-b border-teal-200 bg-[#f3fbfa] align-top transition hover:bg-[#edf8f7]"
-                          onClick={() => {
-                            window.location.href = `/oppdrag/${job.id}`;
-                          }}
-                        >
-                          <td className="py-1 pr-4 text-[0.82rem] font-semibold text-slate-900">#{job.orderNumber}</td>
-                          <td className="py-1 pr-4 text-[0.82rem] text-slate-900">{typeLabel}</td>
-                          <td className="py-1 pr-4 text-[0.82rem] text-slate-900">
-                            <div className="break-words">{job.address}</div>
-                            <a
-                              href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(job.address)}`}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="mt-0.5 inline-flex items-center rounded-[10px] border border-teal-400 bg-[#d5fbf4] px-2 py-[0.15rem] text-[0.72rem] font-semibold text-teal-900 shadow-sm"
-                              onClick={(e) => e.stopPropagation()}
+                        <tr key={job.id} className="align-top">
+                          <td colSpan={5} className="p-0">
+                            <div
+                              className="grid cursor-pointer grid-cols-[20%_30%_14%_14%_22%] rounded-[14px] border border-teal-200 bg-[#f3fbfa] transition hover:bg-[#edf8f7]"
+                              onClick={() => {
+                                router.push(getJobHref(job.id));
+                              }}
                             >
-                              Kart
-                            </a>
+                              <div className="pl-3 pt-3 pb-1 pr-4 text-[0.82rem] text-slate-900">{typeLabel}</div>
+                              <div className="px-0 py-1 pr-4 text-[0.82rem] text-slate-900">
+                                <div className="break-words">{job.address}</div>
+                                <a
+                                  href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(job.address)}`}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="mt-0.5 inline-flex items-center rounded-[10px] border border-teal-400 bg-[#d5fbf4] px-2 py-[0.15rem] text-[0.72rem] font-semibold text-teal-900 shadow-sm"
+                                  onClick={(e) => e.stopPropagation()}
+                                >
+                                  Kart
+                                </a>
+                              </div>
+                              <div className="px-0 py-1 pr-4 text-[0.82rem] text-slate-900">{inferCounty(job.address)}</div>
+                              <div className="px-0 py-1 pr-4 text-[0.82rem] text-slate-900">
+                                {new Date(job.date).toLocaleDateString(locale)}
+                              </div>
+                              <div className="px-0 py-1 text-[0.82rem] text-slate-700">
+                                <p>{note}</p>
+                              </div>
+                            </div>
                           </td>
-                          <td className="py-1 pr-4 text-[0.82rem] text-slate-900">{inferCounty(job.address)}</td>
-                          <td className="py-1 pr-4 text-[0.82rem] text-slate-900">
-                            {new Date(job.date).toLocaleDateString(locale)}
-                          </td>
-                          <td className="py-1 text-[0.82rem] text-slate-700">{note}</td>
                         </tr>
                       );
                     })}
@@ -559,29 +682,28 @@ export function PublicHomePage({
                   return (
                     <Link
                       key={job.id}
-                      href={`/oppdrag/${job.id}`}
-                      className="block rounded-2xl border border-teal-200 bg-[#f3fbfa] p-4 shadow-sm"
+                      href={getJobHref(job.id)}
+                      className="block rounded-[18px] border border-teal-200 bg-[#f3fbfa] p-3 shadow-sm"
                     >
                       <div className="flex items-start justify-between gap-3">
                         <div>
-                          <p className="text-lg font-semibold text-slate-900">#{job.orderNumber}</p>
-                          <p className="text-base text-slate-900">{typeLabel}</p>
+                          <p className="text-[0.95rem] text-slate-900">{typeLabel}</p>
                         </div>
                         <span className="rounded-full bg-teal-50 px-3 py-1 text-[10px] font-black uppercase tracking-[0.14em] text-teal-800">
                           {inferCounty(job.address)}
                         </span>
                       </div>
-                      <p className="mt-3 text-base font-semibold text-slate-900">{note}</p>
+                      <p className="mt-2.5 text-[0.95rem] font-semibold text-slate-900">{note}</p>
                       <a
                         href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(job.address)}`}
                         target="_blank"
                         rel="noopener noreferrer"
                         onClick={(e) => e.stopPropagation()}
-                        className="mt-2 inline-flex items-center rounded-[10px] border border-teal-400 bg-[#d5fbf4] px-2.5 py-[0.2rem] text-[0.8rem] font-semibold text-teal-900 shadow-sm"
+                        className="mt-2 inline-flex items-center rounded-[10px] border border-teal-400 bg-[#d5fbf4] px-2.5 py-[0.15rem] text-[0.76rem] font-semibold text-teal-900 shadow-sm"
                       >
                         Kart
                       </a>
-                      <div className="mt-3 flex items-end justify-between gap-3">
+                      <div className="mt-2.5 flex items-end justify-between gap-3">
                         <p className="text-sm font-medium text-slate-500">{inferCity(job.address)}</p>
                         <p className="text-sm text-slate-600">
                           {new Date(job.date).toLocaleDateString(locale)}
@@ -598,6 +720,10 @@ export function PublicHomePage({
             </div>
           )}
         </section>
+      </div>
+
+      <div className="mx-auto mt-8 max-w-6xl">
+        <PublicSiteFooter />
       </div>
 
       <Link

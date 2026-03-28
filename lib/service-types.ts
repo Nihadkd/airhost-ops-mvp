@@ -42,7 +42,7 @@ export function isGuestCountServiceType(type: string) {
 }
 
 export function isChecklistServiceType(type: string) {
-  return type === ServiceType.KEY_HANDLING;
+  return type === ServiceType.CLEANING;
 }
 
 export function isValidServiceType(type: string): type is ServiceType {

@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { signOut } from "next-auth/react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { PaymentBadge } from "@/components/payment-badge";
 import { StatusBadge } from "@/components/status-badge";
 import { useLanguage } from "@/lib/language-context";
@@ -19,13 +20,31 @@ type AirbnbJob = {
   landlord: { name: string };
 };
 
+type Me = {
+  name: string;
+  accountRole: "ADMIN" | "UTLEIER" | "TJENESTE";
+  effectiveRole: "ADMIN" | "UTLEIER" | "TJENESTE";
+};
+
 type SortMode = "NEWEST" | "OLDEST" | "SOONEST";
 
-export function AirbnbLegacyPage({ jobs }: { jobs: AirbnbJob[] }) {
+export function AirbnbLegacyPage({
+  jobs,
+  isAuthenticated = false,
+  me = null,
+}: {
+  jobs: AirbnbJob[];
+  isAuthenticated?: boolean;
+  me?: Me | null;
+}) {
   const [query, setQuery] = useState("");
   const [sortMode, setSortMode] = useState<SortMode>("NEWEST");
-  const { lang } = useLanguage();
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [unreadCount, setUnreadCount] = useState(0);
+  const { t, lang } = useLanguage();
   const locale = lang === "no" ? "nb-NO" : "en-GB";
+  const menuRef = useRef<HTMLDivElement | null>(null);
+  const hasAdminAccess = me?.accountRole === "ADMIN";
 
   const filteredJobs = useMemo(() => {
     const normalizedQuery = query.trim().toLowerCase();
@@ -51,6 +70,69 @@ export function AirbnbLegacyPage({ jobs }: { jobs: AirbnbJob[] }) {
         return rightCreated - leftCreated;
       });
   }, [jobs, query, sortMode]);
+
+  const menuItems = useMemo(
+    () =>
+      me
+        ? [
+            { href: "/orders/my", label: t("myOrdersMenu"), show: true },
+            { href: "/prices", label: t("prices"), show: true },
+            { href: "/messages", label: t("messages"), show: true },
+            { href: "/orders/new", label: t("newOrder"), show: hasAdminAccess || me.effectiveRole === "UTLEIER" || me.effectiveRole === "ADMIN" },
+            { href: "/profile", label: `${t("profile")} (${me.name})`, show: true },
+            { href: "/settings", label: t("settings"), show: true },
+            { href: "/admin/users", label: t("users"), show: hasAdminAccess || me.effectiveRole === "ADMIN" },
+            { href: "/admin/lab", label: t("adminLab"), show: hasAdminAccess || me.effectiveRole === "ADMIN" },
+          ]
+        : [],
+    [hasAdminAccess, me, t],
+  );
+
+  useEffect(() => {
+    if (!menuOpen) return;
+    const onClickAway = (event: MouseEvent) => {
+      if (!menuRef.current?.contains(event.target as Node)) {
+        setMenuOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", onClickAway);
+    return () => document.removeEventListener("mousedown", onClickAway);
+  }, [menuOpen]);
+
+  useEffect(() => {
+    if (!isAuthenticated) return;
+    let mounted = true;
+
+    const refreshUnreadCount = async () => {
+      try {
+        const res = await fetch("/api/notifications/unread-count", { cache: "no-store" });
+        if (!res.ok) return;
+        const data = (await res.json()) as { count?: number };
+        if (!mounted) return;
+        const next = Number(data?.count ?? 0);
+        setUnreadCount(Number.isFinite(next) && next > 0 ? next : 0);
+      } catch {
+        // Ignore transient errors.
+      }
+    };
+
+    void refreshUnreadCount();
+    const timer = window.setInterval(() => {
+      if (document.visibilityState === "visible") {
+        void refreshUnreadCount();
+      }
+    }, 15000);
+    const onFocus = () => void refreshUnreadCount();
+    window.addEventListener("focus", onFocus);
+    document.addEventListener("visibilitychange", onFocus);
+
+    return () => {
+      mounted = false;
+      window.clearInterval(timer);
+      window.removeEventListener("focus", onFocus);
+      document.removeEventListener("visibilitychange", onFocus);
+    };
+  }, [isAuthenticated]);
 
   const mapUrl = (address: string) =>
     `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(address)}`;
@@ -79,17 +161,59 @@ export function AirbnbLegacyPage({ jobs }: { jobs: AirbnbJob[] }) {
               </div>
             </Link>
 
-            <button
-              type="button"
-              className="inline-flex h-[42px] w-[42px] items-center justify-center rounded-[14px] bg-slate-100 text-slate-700"
-              aria-label="Meny"
-            >
-              <svg width="18" height="18" viewBox="0 0 16 16" aria-hidden="true">
-                <circle cx="8" cy="3" r="1.5" fill="currentColor" />
-                <circle cx="8" cy="8" r="1.5" fill="currentColor" />
-                <circle cx="8" cy="13" r="1.5" fill="currentColor" />
-              </svg>
-            </button>
+            {isAuthenticated && me ? (
+              <div className="relative" ref={menuRef}>
+                <button
+                  type="button"
+                  className="inline-flex h-[42px] w-[42px] items-center justify-center rounded-[14px] bg-slate-100 text-slate-700"
+                  aria-label={t("menu")}
+                  title={t("menu")}
+                  onClick={() => setMenuOpen((prev) => !prev)}
+                >
+                  <svg width="18" height="18" viewBox="0 0 16 16" aria-hidden="true">
+                    <circle cx="8" cy="3" r="1.5" fill="currentColor" />
+                    <circle cx="8" cy="8" r="1.5" fill="currentColor" />
+                    <circle cx="8" cy="13" r="1.5" fill="currentColor" />
+                  </svg>
+                </button>
+                {menuOpen && (
+                  <div className="absolute right-0 z-50 mt-2 w-72 rounded-xl border border-slate-200 bg-white p-3 shadow-lg">
+                    <p className="mb-2 text-xs uppercase tracking-wide text-slate-500">{t("menu")}</p>
+                    <nav className="space-y-1">
+                      {menuItems.filter((item) => item.show).map((item) => (
+                        <Link
+                          key={item.href}
+                          href={item.href}
+                          onClick={() => setMenuOpen(false)}
+                          className="flex items-center justify-between rounded-lg px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100"
+                        >
+                          <span>{item.label}</span>
+                          {item.href === "/messages" && unreadCount > 0 ? (
+                            <span className="inline-flex min-w-[22px] items-center justify-center rounded-full bg-teal-700 px-2 py-0.5 text-xs font-bold text-white">
+                              {unreadCount}
+                            </span>
+                          ) : null}
+                        </Link>
+                      ))}
+                    </nav>
+                    <div className="mt-3 border-t border-slate-200 pt-3">
+                      <button className="btn btn-danger w-full" onClick={() => signOut({ callbackUrl: "/login" })}>
+                        {t("logout")}
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div className="flex flex-wrap gap-2">
+                <Link href="/login" className="btn btn-secondary">
+                  Logg inn
+                </Link>
+                <Link href="/orders/new" className="btn btn-primary">
+                  Legg ut jobb
+                </Link>
+              </div>
+            )}
           </div>
         </header>
 

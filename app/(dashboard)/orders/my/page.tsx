@@ -45,7 +45,7 @@ type DashboardPayload = {
 
 type Filters = {
   search: string;
-  sort: "NEWEST_OLDEST" | "OLDEST_NEWEST" | "NEAREST";
+  sort: "NEWEST_OLDEST" | "OLDEST_NEWEST" | "NEAREST" | "DUE_SOON" | "RECENTLY_ASSIGNED";
   status: "ongoing" | "completed" | "all";
 };
 
@@ -65,17 +65,30 @@ export default function MyOrdersPage() {
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(false);
-  const filtersFromUrl = useMemo<Filters>(() => ({
-    search: searchParams.get("search") ?? "",
-    sort:
-      searchParams.get("sort") === "OLDEST_NEWEST" || searchParams.get("sort") === "NEAREST"
-        ? (searchParams.get("sort") as Filters["sort"])
-        : initialFilters.sort,
-    status:
-      searchParams.get("status") === "ongoing" || searchParams.get("status") === "completed"
-        ? (searchParams.get("status") as Filters["status"])
-        : initialFilters.status,
-  }), [searchParams]);
+  const filtersFromUrl = useMemo<Filters>(() => {
+    const sortParam = searchParams.get("sort");
+    const legacyFocusParam = searchParams.get("focus");
+    const sort =
+      sortParam === "OLDEST_NEWEST" ||
+      sortParam === "NEAREST" ||
+      sortParam === "DUE_SOON" ||
+      sortParam === "RECENTLY_ASSIGNED"
+        ? (sortParam as Filters["sort"])
+        : legacyFocusParam === "due_soon"
+          ? "DUE_SOON"
+          : legacyFocusParam === "recently_assigned"
+            ? "RECENTLY_ASSIGNED"
+            : initialFilters.sort;
+
+    return {
+      search: searchParams.get("search") ?? "",
+      sort,
+      status:
+        searchParams.get("status") === "ongoing" || searchParams.get("status") === "completed"
+          ? (searchParams.get("status") as Filters["status"])
+          : initialFilters.status,
+    };
+  }, [searchParams]);
   const pageFromUrl = useMemo(() => {
     const raw = Number(searchParams.get("page") ?? "1");
     return Number.isFinite(raw) && raw > 0 ? Math.floor(raw) : 1;
@@ -167,8 +180,14 @@ export default function MyOrdersPage() {
     setMe(data.me);
     setOrders(data.orders);
     if (data.filters?.status) {
-      setFilters((prev) => ({ ...prev, status: data.filters?.status ?? prev.status }));
-      setDebouncedFilters((prev) => ({ ...prev, status: data.filters?.status ?? prev.status }));
+      setFilters((prev) => ({
+        ...prev,
+        status: data.filters?.status ?? prev.status,
+      }));
+      setDebouncedFilters((prev) => ({
+        ...prev,
+        status: data.filters?.status ?? prev.status,
+      }));
     }
     setTotalPages(data.pagination.totalPages);
     setTotal(data.pagination.total);
@@ -380,6 +399,8 @@ export default function MyOrdersPage() {
             <option value="NEWEST_OLDEST">{t("sortNewestOldest")}</option>
             <option value="OLDEST_NEWEST">{t("sortOldestNewest")}</option>
             <option value="NEAREST">{t("sortNearest")}</option>
+            <option value="DUE_SOON">{t("sortDueSoon")}</option>
+            <option value="RECENTLY_ASSIGNED">{t("sortRecentlyAssigned")}</option>
           </select>
           <input
             className="input md:col-span-1 lg:col-span-2"

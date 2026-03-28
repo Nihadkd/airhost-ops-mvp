@@ -3,7 +3,10 @@ import { prisma } from "@/lib/prisma";
 import { requireAuth } from "@/lib/rbac";
 import { apiError, handleApiError } from "@/lib/api";
 import { assignmentStatuses } from "@/lib/order-assignment";
-import { sendWorkerAcceptedAssignmentEmail } from "@/lib/email-notifications";
+import {
+  sendAssignmentAcceptedByWorkerEmail,
+  sendAssignmentConfirmedEmail,
+} from "@/lib/email-notifications";
 import { notifyUserEvent } from "@/lib/user-event-notifications";
 
 export async function PUT(_: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -21,6 +24,7 @@ export async function PUT(_: Request, { params }: { params: Promise<{ id: string
         assignedToId: true,
         assignmentStatus: true,
         landlord: { select: { id: true, name: true, email: true } },
+        assignedTo: { select: { id: true, name: true, email: true } },
       },
     });
     if (!order) return apiError(404, "Order not found");
@@ -38,7 +42,7 @@ export async function PUT(_: Request, { params }: { params: Promise<{ id: string
         assignmentStatus: assignmentStatuses.PENDING_WORKER_ACCEPTANCE,
       },
       data: {
-        assignmentStatus: assignmentStatuses.PENDING_LANDLORD_APPROVAL,
+        assignmentStatus: assignmentStatuses.CONFIRMED,
       },
     });
     if (updateResult.count === 0) {
@@ -46,6 +50,8 @@ export async function PUT(_: Request, { params }: { params: Promise<{ id: string
         code: "ASSIGNMENT_STATE_CHANGED",
       });
     }
+
+    const workerName = order.assignedTo?.name || session.user.name || "Tjenesteutforer";
 
     if (order.landlord) {
       await notifyUserEvent({
@@ -55,19 +61,44 @@ export async function PUT(_: Request, { params }: { params: Promise<{ id: string
           name: order.landlord.name,
         },
         actorUserId: session.user.id,
-        message: `${session.user.name || "Tjenesteutforer"} vil utfore oppdrag #${order.orderNumber}. Du ma godkjenne.`,
+        message: `${workerName} har godtatt oppdrag #${order.orderNumber}. Oppdraget er nå bekreftet.`,
         targetUrl: `/orders/${id}`,
         push: {
-          title: "Godkjenn tjenesteutforer",
-          body: `${session.user.name || "Tjenesteutforer"} venter pa godkjenning for oppdrag #${order.orderNumber}.`,
-          data: { orderId: id, type: "assignment_pending_landlord", path: `/orders/${id}` },
+          title: "Oppdrag bekreftet",
+          body: `${workerName} har godtatt oppdrag #${order.orderNumber}.`,
+          data: { orderId: id, type: "assignment_confirmed", path: `/orders/${id}` },
         },
         email: () =>
-          sendWorkerAcceptedAssignmentEmail({
+          sendAssignmentAcceptedByWorkerEmail({
             to: { email: order.landlord.email, name: order.landlord.name },
             orderId: id,
             orderNumber: order.orderNumber,
-            workerName: session.user.name || "Tjenesteutforer",
+            workerName,
+          }),
+      });
+    }
+
+    const assignedWorker = order.assignedTo;
+    if (isAdmin && assignedWorker && assignedWorker.id !== session.user.id) {
+      await notifyUserEvent({
+        recipient: {
+          userId: assignedWorker.id,
+          email: assignedWorker.email,
+          name: assignedWorker.name,
+        },
+        actorUserId: session.user.id,
+        message: `Oppdrag #${order.orderNumber} er nå bekreftet.`,
+        targetUrl: `/orders/${id}`,
+        push: {
+          title: "Oppdrag bekreftet",
+          body: `Oppdrag #${order.orderNumber} er nå bekreftet.`,
+          data: { orderId: id, type: "assignment_confirmed", path: `/orders/${id}` },
+        },
+        email: () =>
+          sendAssignmentConfirmedEmail({
+            to: { email: assignedWorker.email, name: assignedWorker.name },
+            orderId: id,
+            orderNumber: order.orderNumber,
           }),
       });
     }
