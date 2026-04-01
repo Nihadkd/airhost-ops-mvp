@@ -217,6 +217,50 @@ export function AirbnbLegacyPage({
           </div>
         </header>
 
+        <section className="panel rounded-[28px] px-6 py-6">
+          <div className="max-w-5xl space-y-6">
+            <div className="space-y-3">
+              <h1 className="text-3xl font-black tracking-tight text-slate-900 sm:text-4xl">
+                Airbnb rengjøring i Oslo
+              </h1>
+              <p className="text-lg font-medium leading-8 text-slate-900">
+                ServNest tilbyr profesjonell Airbnb rengjøring i Oslo for utleiere som ønsker en enkel og trygg løsning
+                mellom gjester.
+              </p>
+            </div>
+
+            <div className="grid gap-6 lg:grid-cols-2">
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-5">
+                <h2 className="text-xl font-bold text-slate-900">Hva inkluderer Airbnb rengjøring?</h2>
+                <ul className="mt-4 space-y-3 text-base text-slate-700">
+                  <li>Rengjøring av bad og kjøkken</li>
+                  <li>Støvsuging og vask av alle rom</li>
+                  <li>Bytte av sengetøy og håndklær</li>
+                  <li>Klargjøring for neste gjest</li>
+                </ul>
+              </div>
+
+              <div className="rounded-2xl border border-teal-200 bg-teal-50 p-5">
+                <h2 className="text-xl font-bold text-slate-900">Hvorfor velge ServNest?</h2>
+                <ul className="mt-4 space-y-3 text-base text-slate-700">
+                  <li>Rask respons</li>
+                  <li>Pålitelig levering</li>
+                  <li>Erfaring med Airbnb utleie</li>
+                  <li>Høy kvalitet hver gang</li>
+                </ul>
+              </div>
+            </div>
+
+            <div className="rounded-2xl border border-slate-200 bg-white p-5">
+              <h2 className="text-2xl font-black text-slate-900">Bestill Airbnb rengjøring i Oslo</h2>
+              <p className="mt-3 text-base leading-7 text-slate-700">
+                Trenger du hjelp med Airbnb rengjøring i Oslo?
+              </p>
+              <p className="text-base leading-7 text-slate-700">Ta kontakt med oss i dag.</p>
+            </div>
+          </div>
+        </section>
+
         <section className="panel rounded-[28px] p-5">
           <p className="text-[1.2rem] font-medium text-slate-900">Filter</p>
           <div className="mt-5 grid gap-3 md:grid-cols-[36rem_minmax(0,1fr)]">

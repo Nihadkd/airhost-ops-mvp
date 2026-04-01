@@ -33,13 +33,28 @@ async function assertHealth() {
   }
 }
 
+async function assertDatabaseHealth() {
+  const res = await fetch(`${baseUrl}/api/health/db`, { cache: "no-store" });
+  const json = await res.json().catch(() => null);
+
+  if (!res.ok) {
+    throw new Error(`Expected /api/health/db 200, got ${res.status}. Body: ${JSON.stringify(json)}`);
+  }
+
+  if (!json?.ok) {
+    throw new Error("Expected database health response { ok: true }");
+  }
+}
+
 async function assertRegister() {
   const id = Math.random().toString(36).slice(2, 10);
   const payload = {
     name: `Smoke ${id}`,
     email: `smoke-${id}@example.com`,
+    phone: "+4799999999",
     password: "SmokePass123!",
     role: "UTLEIER",
+    acceptedTerms: true,
   };
 
   const res = await fetch(`${baseUrl}/api/auth/register`, {
@@ -48,15 +63,33 @@ async function assertRegister() {
     body: JSON.stringify(payload),
   });
 
-  if (res.status !== 201) {
-    const body = await res.text();
-    throw new Error(`Expected /api/auth/register 201, got ${res.status}. Body: ${body}`);
+  if (res.status === 202) {
+    return;
   }
+
+  const body = await res.text();
+
+  if (res.status === 503) {
+    const json = (() => {
+      try {
+        return JSON.parse(body);
+      } catch {
+        return null;
+      }
+    })();
+    if (json?.code === "MAIL_NOT_CONFIGURED") {
+      console.log("Smoke test skipped email registration check because mail is not configured");
+      return;
+    }
+  }
+
+  throw new Error(`Expected /api/auth/register 202, got ${res.status}. Body: ${body}`);
 }
 
 async function run() {
   await waitForHealthy(baseUrl, timeoutMs);
   await assertHealth();
+  await assertDatabaseHealth();
   await assertRegister();
   console.log(`Smoke test passed for ${baseUrl}`);
 }

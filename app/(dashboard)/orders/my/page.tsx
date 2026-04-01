@@ -1,7 +1,7 @@
 "use client";
 
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import toast from "react-hot-toast";
 import { PaymentBadge } from "@/components/payment-badge";
 import { StatusBadge } from "@/components/status-badge";
@@ -55,6 +55,14 @@ const initialFilters: Filters = {
   status: "all",
 };
 
+function normalizeSearchValue(value: string) {
+  return value.trim();
+}
+
+function areFiltersEqual(left: Filters, right: Filters) {
+  return left.search === right.search && left.sort === right.sort && left.status === right.status;
+}
+
 export default function MyOrdersPage() {
   const { t, lang } = useLanguage();
   const locale = lang === "no" ? "nb-NO" : "en-US";
@@ -103,6 +111,7 @@ export default function MyOrdersPage() {
   const pageSize = 20;
   const [totalPages, setTotalPages] = useState(1);
   const [total, setTotal] = useState(0);
+  const latestFetchRequestIdRef = useRef(0);
 
   const mapUrl = (address: string) =>
     `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(address)}`;
@@ -127,26 +136,19 @@ export default function MyOrdersPage() {
   }, [filters]);
 
   useEffect(() => {
-    setFilters((prev) =>
-      prev.search === filtersFromUrl.search &&
-      prev.sort === filtersFromUrl.sort &&
-      prev.status === filtersFromUrl.status
-        ? prev
-        : filtersFromUrl,
-    );
-    setDebouncedFilters((prev) =>
-      prev.search === filtersFromUrl.search &&
-      prev.sort === filtersFromUrl.sort &&
-      prev.status === filtersFromUrl.status
-        ? prev
-        : filtersFromUrl,
-    );
-    setPage((prev) => (prev === pageFromUrl ? prev : pageFromUrl));
+    const syncHandle = window.setTimeout(() => {
+      setFilters((prev) => (areFiltersEqual(prev, filtersFromUrl) ? prev : filtersFromUrl));
+      setDebouncedFilters((prev) => (areFiltersEqual(prev, filtersFromUrl) ? prev : filtersFromUrl));
+      setPage((prev) => (prev === pageFromUrl ? prev : pageFromUrl));
+    }, 0);
+
+    return () => window.clearTimeout(syncHandle);
   }, [filtersFromUrl, pageFromUrl]);
 
   const queryString = useMemo(() => {
     const params = new URLSearchParams();
-    if (debouncedFilters.search) params.set("search", debouncedFilters.search);
+    const normalizedSearch = normalizeSearchValue(debouncedFilters.search);
+    if (normalizedSearch) params.set("search", normalizedSearch);
     params.set("sort", debouncedFilters.sort);
     params.set("view", "my");
     params.set("status", debouncedFilters.status);
@@ -157,28 +159,30 @@ export default function MyOrdersPage() {
 
   useEffect(() => {
     const nextParams = new URLSearchParams();
-    if (debouncedFilters.search) nextParams.set("search", debouncedFilters.search);
+    const normalizedSearch = normalizeSearchValue(debouncedFilters.search);
+    if (normalizedSearch) nextParams.set("search", normalizedSearch);
     if (debouncedFilters.sort !== initialFilters.sort) nextParams.set("sort", debouncedFilters.sort);
     if (debouncedFilters.status !== initialFilters.status) nextParams.set("status", debouncedFilters.status);
     if (page > 1) nextParams.set("page", String(page));
 
     const next = nextParams.toString();
-    const currentParams = new URLSearchParams(searchParams.toString());
-    currentParams.delete("view");
-    currentParams.delete("pageSize");
-    const current = currentParams.toString();
+    const current = window.location.search.replace(/^\?/, "");
 
     if (next === current) return;
-    router.replace(next ? `${pathname}?${next}` : pathname, { scroll: false });
-  }, [debouncedFilters, page, pathname, router, searchParams]);
+    window.history.replaceState(window.history.state, "", next ? `${pathname}?${next}` : pathname);
+  }, [debouncedFilters, page, pathname]);
 
   const fetchData = useCallback(async () => {
+    const requestId = latestFetchRequestIdRef.current + 1;
+    latestFetchRequestIdRef.current = requestId;
     const res = await fetch(`/api/dashboard${queryString}`, { cache: "no-store" });
     if (!res.ok) return res.status;
     const data = (await res.json()) as DashboardPayload;
+    if (requestId !== latestFetchRequestIdRef.current) return 200;
     setLoadError(false);
     setMe(data.me);
     setOrders(data.orders);
+    setSelectedOrderIds((prev) => prev.filter((id) => data.orders.some((order) => order.id === id)));
     if (data.filters?.status) {
       setFilters((prev) => ({
         ...prev,
@@ -212,7 +216,7 @@ export default function MyOrdersPage() {
     return () => {
       mounted = false;
     };
-  }, [fetchData, t]);
+  }, [fetchData, router]);
 
   const updateFilter = <K extends keyof Filters>(key: K, value: Filters[K]) => {
     setPage(1);
@@ -223,10 +227,6 @@ export default function MyOrdersPage() {
     () => orders.filter((order) => selectedOrderIds.includes(order.id)),
     [orders, selectedOrderIds],
   );
-
-  useEffect(() => {
-    setSelectedOrderIds((prev) => prev.filter((id) => orders.some((order) => order.id === id)));
-  }, [orders]);
 
   const toggleOrderSelection = useCallback((orderId: string) => {
     setSelectedOrderIds((prev) => (prev.includes(orderId) ? prev.filter((id) => id !== orderId) : [...prev, orderId]));
@@ -344,7 +344,8 @@ export default function MyOrdersPage() {
   }, [orders]);
   const orderDetailHref = useCallback((orderId: string) => {
     const params = new URLSearchParams();
-    if (debouncedFilters.search) params.set("search", debouncedFilters.search);
+    const normalizedSearch = normalizeSearchValue(debouncedFilters.search);
+    if (normalizedSearch) params.set("search", normalizedSearch);
     if (debouncedFilters.sort !== initialFilters.sort) params.set("sort", debouncedFilters.sort);
     if (debouncedFilters.status !== initialFilters.status) params.set("status", debouncedFilters.status);
     if (page > 1) params.set("page", String(page));
@@ -404,7 +405,9 @@ export default function MyOrdersPage() {
           </select>
           <input
             className="input md:col-span-1 lg:col-span-2"
+            type="search"
             placeholder={t("searchJobs")}
+            aria-label={t("searchJobs")}
             value={filters.search}
             onChange={(e) => updateFilter("search", e.target.value)}
           />

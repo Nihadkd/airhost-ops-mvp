@@ -88,13 +88,11 @@ export function OrderDetailClient({
   role,
   workers,
   currentUserId,
-  backHref,
 }: {
   initialOrder: Order;
   role: string;
   workers: Worker[];
   currentUserId: string;
-  backHref: string;
 }) {
   const router = useRouter();
   const [order, setOrder] = useState(initialOrder);
@@ -116,6 +114,7 @@ export function OrderDetailClient({
   const [payment, setPayment] = useState<PaymentSummary | null>(null);
   const [paymentBusy, setPaymentBusy] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [deletingImageId, setDeletingImageId] = useState<string | null>(null);
   const [visibleImageCount, setVisibleImageCount] = useState(12);
   const [loadedImageIds, setLoadedImageIds] = useState<Record<string, true>>({});
   const [fullscreenImageUrl, setFullscreenImageUrl] = useState<string | null>(null);
@@ -177,7 +176,7 @@ export function OrderDetailClient({
   const workerPendingStart = role !== "ADMIN" && isWorkerParticipant && order.status === "PENDING" && isAssignmentConfirmed;
   const canWorkerWriteToJob = role === "ADMIN" || !isWorkerParticipant || order.status === "IN_PROGRESS";
   const canWorkerSendMessages = !isReadOnlyChat && canWorkerWriteToJob;
-  const canWorkerUpload = (role === "TJENESTE" || role === "ADMIN") && canWorkerWriteToJob;
+  const canUploadImages = role === "ADMIN" || isLandlordParticipant || ((role === "TJENESTE") && canWorkerWriteToJob);
   const canWorkerComplete = (role === "TJENESTE" || role === "ADMIN") && order.status === "IN_PROGRESS";
   const usesCompletionChecklist = isChecklistServiceType(order.type);
   const canCommentOnImages = role === "ADMIN" || !isWorkerParticipant || order.status === "IN_PROGRESS";
@@ -763,6 +762,25 @@ export function OrderDetailClient({
     await refreshMessages({ playAlert: false });
   };
 
+  const deleteImage = async (imageId: string) => {
+    const confirmed = window.confirm(t("confirmDeleteImage"));
+    if (!confirmed) return;
+
+    setDeletingImageId(imageId);
+    const res = await fetch(`/api/images/${imageId}`, {
+      method: "DELETE",
+    });
+    setDeletingImageId(null);
+
+    if (!res.ok) {
+      await showApiError(res);
+      return;
+    }
+
+    toast.success(t("imageDeleted"));
+    await refresh();
+  };
+
   const saveOrderChanges = async (formData: FormData) => {
     const type = String(formData.get("type") ?? "").trim();
     const address = String(formData.get("address") ?? "").trim();
@@ -995,9 +1013,6 @@ export function OrderDetailClient({
   return (
     <div className="space-y-4">
       <div className="panel p-4 sm:p-5">
-        <Link href={backHref} className="mb-3 inline-flex text-sm font-semibold text-teal-700 underline">
-          Tilbake
-        </Link>
         {typeof order.orderNumber === "number" && (
           <p className="mb-2 text-sm font-semibold text-slate-600">
             {t("orderIdNumber")}: <span className="text-slate-900">#{order.orderNumber}</span>
@@ -1447,7 +1462,7 @@ export function OrderDetailClient({
         </section>
       )}
 
-      {canWorkerUpload && (
+      {canUploadImages && (
         <form onSubmit={(event) => void handleUploadSubmit(event)} className="panel flex flex-wrap items-end gap-2 p-4 sm:p-5">
           <div>
             <p className="mb-1 block text-sm">{t("uploadImage")}</p>
@@ -1536,7 +1551,19 @@ export function OrderDetailClient({
                 }}
               />
             </div>
-            <p className="mt-2 text-xs uppercase text-slate-500">{image.kind ?? t("uploadImage").toLowerCase()}</p>
+            <div className="mt-2 flex flex-wrap items-start justify-between gap-2">
+              <p className="text-xs uppercase text-slate-500">{image.kind ?? t("uploadImage").toLowerCase()}</p>
+              {(role === "ADMIN" || image.uploadedBy?.id === currentUserId) ? (
+                <button
+                  type="button"
+                  className="text-sm font-semibold text-rose-700 underline"
+                  disabled={deletingImageId === image.id}
+                  onClick={() => void deleteImage(image.id)}
+                >
+                  {deletingImageId === image.id ? t("deleteImageBusy") : t("deleteImageAction")}
+                </button>
+              ) : null}
+            </div>
             <p className="text-sm">{image.caption}</p>
             <div className="mt-2 space-y-2 text-sm">
               {image.comments.map((item) => (

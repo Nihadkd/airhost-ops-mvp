@@ -9,8 +9,10 @@ export async function POST(req: Request) {
   try {
     const session = await requireAuth();
     const isAdmin = session.user.accountRole === "ADMIN" || session.user.role === "ADMIN";
-    if (!isAdmin && session.user.role !== "TJENESTE") {
-      return apiError(403, "Only admin/worker can upload files");
+    const isWorker = session.user.role === "TJENESTE";
+    const isLandlord = session.user.role === "UTLEIER";
+    if (!isAdmin && !isWorker && !isLandlord) {
+      return apiError(403, "Only admin/worker/landlord can upload files");
     }
 
     const formData = await req.formData();
@@ -34,10 +36,13 @@ export async function POST(req: Request) {
 
     const order = await prisma.serviceOrder.findUnique({ where: { id: orderId } });
     if (!order) return apiError(404, "Order not found");
-    if (!isAdmin && session.user.role === "TJENESTE" && order.assignedToId !== session.user.id) {
+    if (!isAdmin && isLandlord && order.landlordId !== session.user.id) {
+      return apiError(403, "Not landlord for order");
+    }
+    if (!isAdmin && isWorker && order.assignedToId !== session.user.id) {
       return apiError(403, "Not assigned to order");
     }
-    if (!isAdmin && session.user.role === "TJENESTE" && !canAssignedWorkerWriteOrder(order, session.user.id, false)) {
+    if (!isAdmin && isWorker && !canAssignedWorkerWriteOrder(order, session.user.id, false)) {
       return apiError(409, "You must press START before you can write or make changes in this job.", {
         code: "ORDER_NOT_STARTED",
       });

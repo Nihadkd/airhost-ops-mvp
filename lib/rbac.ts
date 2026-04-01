@@ -17,7 +17,7 @@ type SessionWithRole = {
   };
 };
 
-export async function requireAuth(opts?: { allowWithoutLegalConsent?: boolean }): Promise<SessionWithRole> {
+export async function requireAuth(_opts?: { allowWithoutLegalConsent?: boolean }): Promise<SessionWithRole> {
   const session = await auth();
   if (!session?.user?.id) {
     throw new Error("UNAUTHORIZED");

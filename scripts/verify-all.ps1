@@ -25,7 +25,9 @@ function Invoke-WithRetry {
 }
 
 Write-Host "[verify-all] Preparing deterministic test environment"
-Invoke-WithRetry -Label "prisma migrate reset" -Action { npx prisma migrate reset --force --skip-generate --skip-seed }
+Invoke-WithRetry -Label "local prisma dev" -Action { npm run db:local:start }
+Start-Sleep -Seconds 15
+Invoke-WithRetry -Label "local prisma reset" -Action { npm run db:local:reset }
 Invoke-WithRetry -Label "db seed" -Action { npm run db:seed }
 
 Write-Host "[verify-all] Running unit/integration quality gates"

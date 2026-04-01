@@ -10,6 +10,13 @@ export const metadata: Metadata = {
   metadataBase: new URL(siteConfig.url),
   title: siteConfig.defaultTitle,
   description: siteConfig.description,
+  icons: {
+    icon: [
+      { url: "/favicon.svg", type: "image/svg+xml" },
+      { url: "/favicon.ico", sizes: "any" },
+    ],
+    shortcut: [{ url: "/favicon.ico" }],
+  },
   keywords: [
     "lokale tjenester",
     "smajobber",

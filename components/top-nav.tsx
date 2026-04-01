@@ -29,6 +29,10 @@ export function TopNav({ initialMe }: { initialMe: Me }) {
     const match = pathname.match(/^\/orders\/([^/]+)$/);
     return match?.[1] ?? null;
   }, [pathname]);
+  const shareUrlPath = useMemo(() => {
+    if (!shareableOrderId) return null;
+    return `/login?reason=login-required&callbackUrl=${encodeURIComponent(`/orders/${shareableOrderId}`)}`;
+  }, [shareableOrderId]);
   const menuItems = useMemo(
     () => [
       { href: "/orders/my", label: t("myOrdersMenu"), show: true },
@@ -114,8 +118,8 @@ export function TopNav({ initialMe }: { initialMe: Me }) {
         </Link>
 
         <div className="flex items-center gap-2">
-          {shareableOrderId ? (
-            <ShareJobButton urlPath={`/oppdrag/${shareableOrderId}`} />
+          {shareUrlPath ? (
+            <ShareJobButton urlPath={shareUrlPath} />
           ) : null}
 
           <div className="relative" ref={menuRef}>

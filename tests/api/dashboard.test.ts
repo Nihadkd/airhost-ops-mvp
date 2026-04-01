@@ -24,7 +24,7 @@ describe("/api/dashboard", () => {
     expect(res.status).toBe(200);
     expect(vi.mocked(prisma.serviceOrder.findMany)).toHaveBeenCalledWith(
       expect.objectContaining({
-        orderBy: { date: "asc" },
+        orderBy: [{ date: "asc" }, { createdAt: "asc" }],
       }),
     );
   });

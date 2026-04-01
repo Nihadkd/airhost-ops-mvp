@@ -65,7 +65,22 @@ export function AdminUsersClient({ initialUsers }: { initialUsers: User[] }) {
 
   useEffect(() => {
     if (initialUsers.length > 0) return;
-    void refresh();
+
+    let cancelled = false;
+    void fetch("/api/users", { cache: "no-store" })
+      .then((res) => res.json())
+      .then((data: User[]) => {
+        if (!cancelled) {
+          setUsers(data);
+        }
+      })
+      .catch(() => {
+        // Keep the empty state when the initial refresh fails.
+      });
+
+    return () => {
+      cancelled = true;
+    };
   }, [initialUsers.length]);
 
   const createUser = async (formData: FormData) => {

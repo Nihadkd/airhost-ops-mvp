@@ -28,27 +28,24 @@ export default function AboutPage() {
               <p className="text-xs font-semibold text-slate-500">Om nettstedet</p>
             </div>
           </Link>
-          <Link href="/" className="btn btn-secondary">
-            Tilbake
-          </Link>
         </header>
 
         <section className="mt-6 grid gap-4 md:grid-cols-[1.35fr_0.65fr]">
           <article className="panel rounded-[28px] px-6 py-7 sm:px-8">
             <p className="text-xs font-black uppercase tracking-[0.24em] text-teal-700">Om oss</p>
-            <h1 className="mt-3 text-4xl font-black leading-tight text-slate-900">Velkommen til ServNest</h1>
+            <h1 className="mt-3 text-4xl font-black leading-tight text-slate-900">Om ServNest</h1>
             <div className="mt-6 space-y-4 text-base leading-8 text-slate-700 sm:text-lg">
               <p>
-                ServNest er en plattform der folk kan hjelpe hverandre med sma og store oppdrag. Her kan du enkelt legge
-                ut en jobb du trenger hjelp til, eller finne oppdrag du kan utfore for andre.
+                {`ServNest er en digital plattform hvor privatpersoner og tjenesteytere m\u00f8tes for \u00e5 f\u00e5 utf\u00f8rt og utf\u00f8re oppdrag p\u00e5 en enkel og effektiv m\u00e5te. Plattformen gj\u00f8r det mulig \u00e5 legge ut oppdrag og komme i kontakt med personer som kan hjelpe, enten det gjelder sm\u00e5 oppgaver i hverdagen eller st\u00f8rre jobber.`}
               </p>
               <p>
-                Opprett en oppgave, avtal pris og tidspunkt, og la andre i naerheten ta jobben. Tjenester kan vaere alt
-                fra rengjoring, flyttehjelp og hagearbeid til teknisk hjelp, dyrepass og mye mer.
+                {`Gjennom ServNest kan du finne hjelp til et bredt spekter av tjenester, blant annet rengj\u00f8ring, flyttehjelp, transport, hagearbeid, teknisk hjelp og mindre reparasjoner. Samtidig gir plattformen mulighet for enkeltpersoner \u00e5 ta oppdrag og tjene penger ved \u00e5 hjelpe andre.`}
               </p>
               <p>
-                ServNest gjor det enkelt a finne hjelp eller tjene penger pa a hjelpe andre. Samtidig bygger vi tydelige
-                brandsignaler pa nettstedet, slik at ServNest-navnet kobles sterkere til servnest.no i sok.
+                {`ServNest er tilgjengelig i hele Norge, med s\u00e6rlig aktivitet i byer som Oslo, Bergen, Trondheim, Stavanger, Kristiansand og Troms\u00f8, samt i omr\u00e5der som Drammen, Fredrikstad, Sandnes, Lillestr\u00f8m, \u00c5lesund og Bod\u00f8. Plattformen er utviklet for \u00e5 fungere like godt lokalt som p\u00e5 tvers av byer og regioner.`}
+              </p>
+              <p>
+                {`M\u00e5let med ServNest er \u00e5 gj\u00f8re det enklere \u00e5 koble behov med l\u00f8sninger - raskt, trygt og fleksibelt. Enten du trenger hjelp eller \u00f8nsker \u00e5 tilby tjenester, gir ServNest deg en effektiv m\u00e5te \u00e5 komme i gang p\u00e5.`}
               </p>
             </div>
           </article>

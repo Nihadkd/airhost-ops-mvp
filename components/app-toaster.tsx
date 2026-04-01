@@ -6,6 +6,7 @@ import type { Toast } from "react-hot-toast";
 
 function DismissibleToastBar({ item }: { item: Toast }) {
   const [dragX, setDragX] = useState(0);
+  const [isDragging, setIsDragging] = useState(false);
   const startXRef = useRef<number | null>(null);
   const dismissTimerRef = useRef<number | null>(null);
 
@@ -26,6 +27,7 @@ function DismissibleToastBar({ item }: { item: Toast }) {
 
   const beginDrag = (clientX: number) => {
     startXRef.current = clientX;
+    setIsDragging(true);
   };
 
   const updateDrag = (clientX: number) => {
@@ -40,6 +42,7 @@ function DismissibleToastBar({ item }: { item: Toast }) {
       toast.dismiss(item.id);
     }
     startXRef.current = null;
+    setIsDragging(false);
     setDragX(0);
   };
 
@@ -68,7 +71,7 @@ function DismissibleToastBar({ item }: { item: Toast }) {
       style={{
         transform: `translateX(${dragX}px)`,
         opacity: Math.max(0.35, 1 - Math.abs(dragX) / 180),
-        transition: startXRef.current === null ? "transform 0.18s ease, opacity 0.18s ease" : "none",
+        transition: isDragging ? "none" : "transform 0.18s ease, opacity 0.18s ease",
         touchAction: "pan-y",
       }}
     >

@@ -4,7 +4,6 @@ import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { signOut } from "next-auth/react";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { PublicSiteFooter } from "@/components/public-site-footer";
 import { useLanguage } from "@/lib/language-context";
 import { inferCity, inferCounty, NORWEGIAN_COUNTIES } from "@/lib/public-job-presentation";
 import { appendReturnTo } from "@/lib/return-to";
@@ -30,6 +29,16 @@ const DEFAULT_QUERY = "";
 const DEFAULT_TYPE = "ALL";
 const DEFAULT_COUNTY: (typeof NORWEGIAN_COUNTIES)[number] = "Alle fylker";
 const DEFAULT_SORT_MODE: SortMode = "SOONEST";
+const FEATURED_CITY_GROUPS = [
+  {
+    label: "Storbyer",
+    cities: ["Oslo", "Bergen", "Trondheim", "Stavanger", "Kristiansand", "Tromso"],
+  },
+  {
+    label: "Flere byer",
+    cities: ["Drammen", "Fredrikstad", "Sandnes", "Lillestrom", "Alesund", "Bodo"],
+  },
+] as const;
 
 function parseQueryParam(value: string | null) {
   return value?.trim() ?? DEFAULT_QUERY;
@@ -246,10 +255,14 @@ export function PublicHomePage({
     const nextCounty = parseCountyParam(searchParams.get("county"));
     const nextSort = parseSortParam(searchParams.get("sort"));
 
-    setQuery((current) => (current === nextQuery ? current : nextQuery));
-    setSelectedType((current) => (current === nextType ? current : nextType));
-    setSelectedCounty((current) => (current === nextCounty ? current : nextCounty));
-    setSortMode((current) => (current === nextSort ? current : nextSort));
+    const syncHandle = window.setTimeout(() => {
+      setQuery((current) => (current === nextQuery ? current : nextQuery));
+      setSelectedType((current) => (current === nextType ? current : nextType));
+      setSelectedCounty((current) => (current === nextCounty ? current : nextCounty));
+      setSortMode((current) => (current === nextSort ? current : nextSort));
+    }, 0);
+
+    return () => window.clearTimeout(syncHandle);
   }, [searchParams]);
 
   useEffect(() => {
@@ -475,6 +488,71 @@ export function PublicHomePage({
                   ))}
                 </div>
               </div>
+            </div>
+          </div>
+        </section>
+
+        <section className="mt-5 sm:mt-6">
+          <div className="max-w-4xl rounded-[24px] border border-white/80 bg-white/90 px-5 py-5 shadow-[0_18px_40px_rgba(15,48,61,0.08)] sm:px-6 sm:py-6">
+            <p className="text-xs font-black uppercase tracking-[0.24em] text-teal-700">Tjenester i hele Norge</p>
+            <h2 className="mt-3 text-2xl font-black text-slate-900 sm:text-3xl">Tjenester i hele Norge</h2>
+            <div className="mt-3 max-w-3xl space-y-3 text-base leading-7 text-slate-600 sm:text-lg">
+              <p>
+                ServNest er en plattform hvor du kan legge ut oppdrag og finne personer som kan utføre tjenester. Her
+                kan du enkelt få hjelp til oppgaver i hverdagen, eller selv ta oppdrag og tjene penger.
+              </p>
+              <p>
+                På ServNest kan du koble deg med andre for å få utført eller utføre tjenester - raskt, enkelt og
+                fleksibelt.
+              </p>
+            </div>
+          </div>
+
+          <div className="hidden rounded-[24px] border border-teal-200 bg-[linear-gradient(180deg,#f2fbfa_0%,#e5f6f4_100%)] px-5 py-5 shadow-[0_18px_40px_rgba(11,143,123,0.10)] sm:px-6 sm:py-6">
+            <p className="text-sm font-semibold text-slate-600">Populære områder</p>
+            <div className="mt-3 flex flex-wrap gap-2">
+              {["Oslo", "Bergen", "Trondheim", "Stavanger"].map((city) => (
+                <span
+                  key={city}
+                  className="inline-flex items-center rounded-full border border-teal-200 bg-white px-3 py-1 text-sm font-semibold text-teal-800"
+                >
+                  {city}
+                </span>
+              ))}
+            </div>
+            <p className="mt-4 text-sm leading-6 text-slate-600">
+              Legg ut oppdrag og nå personer som kan hjelpe, uansett om behovet er lokalt eller i en annen by.
+            </p>
+          </div>
+
+          <div className="hidden rounded-[24px] border border-teal-200 bg-[linear-gradient(180deg,#f4fcfb_0%,#e3f4f1_100%)] px-5 py-5 shadow-[0_18px_40px_rgba(11,143,123,0.10)] sm:px-6 sm:py-6">
+            <p className="text-[11px] font-black uppercase tracking-[0.2em] text-teal-700">Dekning</p>
+            <h3 className="mt-2 text-xl font-black text-slate-900 sm:text-2xl">Flere byer. Bedre rekkevidde.</h3>
+            <p className="mt-2 text-sm leading-6 text-slate-600">
+              ServNest er bygget for oppdrag i hele Norge, med ekstra fokus pa byer der det er hoy aktivitet og rask
+              respons.
+            </p>
+
+            <div className="mt-5 grid gap-3 sm:grid-cols-2">
+              {FEATURED_CITY_GROUPS.map((group) => (
+                <div key={group.label} className="rounded-[20px] border border-white/80 bg-white/80 px-4 py-4">
+                  <p className="text-[11px] font-black uppercase tracking-[0.16em] text-slate-500">{group.label}</p>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {group.cities.map((city) => (
+                      <span
+                        key={city}
+                        className="inline-flex items-center rounded-full border border-teal-200 bg-teal-50/70 px-3 py-1 text-sm font-semibold text-teal-900"
+                      >
+                        {city}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <div className="mt-4 rounded-[18px] border border-white/80 bg-white/72 px-4 py-3 text-sm leading-6 text-slate-600">
+              Legg ut oppdrag og na personer som kan hjelpe, enten behovet er lokalt eller i en annen del av landet.
             </div>
           </div>
         </section>
@@ -720,10 +798,6 @@ export function PublicHomePage({
             </div>
           )}
         </section>
-      </div>
-
-      <div className="mx-auto mt-8 max-w-6xl">
-        <PublicSiteFooter />
       </div>
 
       <Link

@@ -2,15 +2,17 @@ import Link from "next/link";
 import { siteConfig } from "@/lib/site-config";
 
 export function PublicSiteFooter() {
+  const showBusinessEmail = siteConfig.businessEmail !== siteConfig.supportEmail;
+
   return (
     <footer className="mt-8 rounded-[28px] border border-white/80 bg-white/90 px-5 py-6 shadow-[0_16px_32px_rgba(15,48,61,0.07)] sm:px-7">
       <div className="grid gap-5 md:grid-cols-[1.2fr_0.8fr]">
         <div>
           <p className="text-xs font-black uppercase tracking-[0.24em] text-teal-700">ServNest</p>
-          <h2 className="mt-2 text-2xl font-black text-slate-900">Lokal hjelp, tydelig firmainfo og sterkere merkevare</h2>
+          <h2 className="mt-2 text-2xl font-black text-slate-900">Lokal hjelp, fleksible oppdrag og enkel kontakt</h2>
           <p className="mt-3 max-w-2xl text-sm leading-7 text-slate-600">
-            ServNest er merkenavnet. {siteConfig.legalName} er registrert enhet med org.nr. {siteConfig.organizationNumber}.
-            Denne informasjonen vises tydelig for a styrke tillit, brandsok og samsvar mellom nettstedet og offentlige registre.
+            ServNest kobler personer som trenger hjelp med personer som kan utføre tjenester. Kontaktinfo finner du her,
+            mens full firmainfo ligger under `Om oss`.
           </p>
         </div>
 
@@ -23,17 +25,11 @@ export function PublicSiteFooter() {
             <a href={`mailto:${siteConfig.supportEmail}`} className="mt-1 block text-sm font-semibold text-slate-700 break-all">
               {siteConfig.supportEmail}
             </a>
-            <a href={`mailto:${siteConfig.businessEmail}`} className="mt-1 block text-sm font-semibold text-slate-700 break-all">
-              {siteConfig.businessEmail}
-            </a>
-          </div>
-
-          <div className="rounded-[20px] bg-slate-50 px-4 py-4">
-            <p className="text-xs font-black uppercase tracking-[0.18em] text-slate-500">Adresse</p>
-            <p className="mt-2 text-sm font-semibold text-slate-900">{siteConfig.address.streetAddress}</p>
-            <p className="text-sm text-slate-700">
-              {siteConfig.address.postalCode} {siteConfig.address.addressLocality}
-            </p>
+            {showBusinessEmail ? (
+              <a href={`mailto:${siteConfig.businessEmail}`} className="mt-1 block text-sm font-semibold text-slate-700 break-all">
+                {siteConfig.businessEmail}
+              </a>
+            ) : null}
           </div>
         </div>
       </div>
