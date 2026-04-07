@@ -26,15 +26,34 @@ describe("notifications and stats", () => {
   });
 
   it("POST /api/notifications", async () => {
-    vi.mocked(requireAuth).mockResolvedValue({ user: { id: "t1", role: "TJENESTE" } } as never);
-    vi.mocked(prisma.notification.create).mockResolvedValue({ id: "n1" } as never);
+    vi.mocked(requireAuth).mockResolvedValue({ user: { id: "a1", role: "ADMIN", accountRole: "ADMIN" } } as never);
+    vi.mocked(prisma.notification.create).mockResolvedValue({ id: "n1", actorUserId: "a1" } as never);
+    const req = new Request("http://localhost", {
+      method: "POST",
+      body: JSON.stringify({ userId: "u1", message: "Test", targetUrl: "/orders/o1" }),
+      headers: { "Content-Type": "application/json" },
+    });
+    const res = await createNotification(req);
+    expect(res.status).toBe(201);
+    expect(vi.mocked(prisma.notification.create)).toHaveBeenCalledWith({
+      data: {
+        userId: "u1",
+        message: "Test",
+        targetUrl: "/orders/o1",
+        actorUserId: "a1",
+      },
+    });
+  });
+
+  it("POST /api/notifications blocks worker access", async () => {
+    vi.mocked(requireAuth).mockResolvedValue({ user: { id: "t1", role: "TJENESTE", accountRole: "TJENESTE" } } as never);
     const req = new Request("http://localhost", {
       method: "POST",
       body: JSON.stringify({ userId: "u1", message: "Test" }),
       headers: { "Content-Type": "application/json" },
     });
     const res = await createNotification(req);
-    expect(res.status).toBe(201);
+    expect(res.status).toBe(403);
   });
 
   it("PUT /api/notifications/[id]/read", async () => {

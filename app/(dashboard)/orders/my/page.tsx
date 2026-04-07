@@ -342,6 +342,10 @@ export default function MyOrdersPage() {
       .filter((order) => order.status !== "COMPLETED")
       .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())[0] ?? null;
   }, [orders]);
+  const hasActiveFilters =
+    normalizeSearchValue(filters.search).length > 0 ||
+    filters.sort !== initialFilters.sort ||
+    filters.status !== initialFilters.status;
   const orderDetailHref = useCallback((orderId: string) => {
     const params = new URLSearchParams();
     const normalizedSearch = normalizeSearchValue(debouncedFilters.search);
@@ -476,7 +480,7 @@ export default function MyOrdersPage() {
           {loading && <p className="text-sm text-slate-500">{t("loadingJobs")}</p>}
           {!loading && orders.length === 0 && (
             <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 px-4 py-6 text-sm text-slate-600">
-              <p className="font-semibold text-slate-800">{t("noJobs")}</p>
+              <p className="font-semibold text-slate-800">{hasActiveFilters ? t("noJobsMatchSearch") : t("noJobs")}</p>
               <p className="mt-1">{t("myOrdersHint")}</p>
             </div>
           )}
@@ -582,7 +586,7 @@ export default function MyOrdersPage() {
                 <tr>
                   <td className="py-8 text-slate-500" colSpan={isAdmin ? 10 : 9}>
                     <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 px-4 py-6 text-center">
-                      <p className="font-semibold text-slate-800">{t("noJobs")}</p>
+                      <p className="font-semibold text-slate-800">{hasActiveFilters ? t("noJobsMatchSearch") : t("noJobs")}</p>
                       <p className="mt-1 text-sm text-slate-500">{t("myOrdersHint")}</p>
                     </div>
                   </td>

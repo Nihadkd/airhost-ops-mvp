@@ -435,20 +435,50 @@ describe("/api/orders", () => {
 
   it("DELETE /api/orders/[id]", async () => {
     vi.mocked(requireAuth).mockResolvedValue({ user: { id: "a1", role: "ADMIN" } } as never);
-    vi.mocked(prisma.serviceOrder.findUnique).mockResolvedValue({ id: "o1", landlordId: "l1", status: "PENDING" } as never);
+    vi.mocked(prisma.serviceOrder.findUnique).mockResolvedValue({
+      id: "o1",
+      landlordId: "l1",
+      status: "PENDING",
+      assignedToId: null,
+      assignmentStatus: "UNASSIGNED",
+      receipt: null,
+    } as never);
     vi.mocked(prisma.serviceOrder.delete).mockResolvedValue({ id: "o1" } as never);
 
     const res = await deleteOrder(new Request("http://localhost"), { params: Promise.resolve({ id: "o1" }) });
     expect(res.status).toBe(200);
   });
 
-  it("DELETE /api/orders/[id] allows landlord to delete own non-pending order", async () => {
+  it("DELETE /api/orders/[id] blocks deleting started order", async () => {
     vi.mocked(requireAuth).mockResolvedValue({ user: { id: "l1", role: "UTLEIER" } } as never);
-    vi.mocked(prisma.serviceOrder.findUnique).mockResolvedValue({ id: "o1", landlordId: "l1", status: "IN_PROGRESS" } as never);
-    vi.mocked(prisma.serviceOrder.delete).mockResolvedValue({ id: "o1" } as never);
+    vi.mocked(prisma.serviceOrder.findUnique).mockResolvedValue({
+      id: "o1",
+      landlordId: "l1",
+      status: "IN_PROGRESS",
+      assignedToId: "t1",
+      assignmentStatus: "CONFIRMED",
+      receipt: null,
+    } as never);
 
     const res = await deleteOrder(new Request("http://localhost"), { params: Promise.resolve({ id: "o1" }) });
-    expect(res.status).toBe(200);
+    expect(res.status).toBe(409);
+    expect(vi.mocked(prisma.serviceOrder.delete)).not.toHaveBeenCalled();
+  });
+
+  it("DELETE /api/orders/[id] blocks deleting pending assigned order", async () => {
+    vi.mocked(requireAuth).mockResolvedValue({ user: { id: "l1", role: "UTLEIER" } } as never);
+    vi.mocked(prisma.serviceOrder.findUnique).mockResolvedValue({
+      id: "o1",
+      landlordId: "l1",
+      status: "PENDING",
+      assignedToId: "t1",
+      assignmentStatus: "PENDING_LANDLORD_APPROVAL",
+      receipt: null,
+    } as never);
+
+    const res = await deleteOrder(new Request("http://localhost"), { params: Promise.resolve({ id: "o1" }) });
+    expect(res.status).toBe(409);
+    expect(vi.mocked(prisma.serviceOrder.delete)).not.toHaveBeenCalled();
   });
 
   it("PUT /api/orders/[id]/claim", async () => {

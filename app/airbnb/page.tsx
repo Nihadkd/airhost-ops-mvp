@@ -26,7 +26,6 @@ export default async function AirbnbPage() {
       type: "KEY_HANDLING",
     },
     orderBy: { date: "asc" },
-    take: 50,
     select: {
       id: true,
       orderNumber: true,

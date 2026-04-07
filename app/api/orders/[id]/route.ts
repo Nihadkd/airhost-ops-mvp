@@ -177,7 +177,17 @@ export async function DELETE(_: Request, { params }: { params: Promise<{ id: str
     const session = await requireAuth();
     const isAdminAccount = session.user.accountRole === "ADMIN";
     const { id } = await params;
-    const order = await prisma.serviceOrder.findUnique({ where: { id } });
+    const order = await prisma.serviceOrder.findUnique({
+      where: { id },
+      select: {
+        id: true,
+        landlordId: true,
+        status: true,
+        assignedToId: true,
+        assignmentStatus: true,
+        receipt: { select: { id: true } },
+      },
+    });
     if (!order) return apiError(404, "Order not found");
 
     const canDelete =
@@ -185,6 +195,18 @@ export async function DELETE(_: Request, { params }: { params: Promise<{ id: str
       session.user.role === "ADMIN" ||
       (session.user.role === "UTLEIER" && order.landlordId === session.user.id);
     if (!canDelete) return apiError(403, "Forbidden");
+
+    if (order.status !== "PENDING") {
+      return apiError(409, "Only pending orders can be deleted.");
+    }
+
+    if (order.assignedToId || order.assignmentStatus !== assignmentStatuses.UNASSIGNED) {
+      return apiError(409, "Cancel the active assignment before deleting this order.");
+    }
+
+    if (order.receipt) {
+      return apiError(409, "Orders with receipts cannot be deleted.");
+    }
 
     await prisma.serviceOrder.delete({ where: { id } });
     return NextResponse.json({ success: true });

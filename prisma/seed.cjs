@@ -1,9 +1,40 @@
 const { PrismaClient, Role, ServiceType, ProfileMode } = require("@prisma/client");
 const bcrypt = require("bcryptjs");
+const { buildDemoOrderPayloads } = require("../scripts/filter-demo-orders-data.cjs");
 
 const prisma = new PrismaClient();
 
+function isLocalDatabaseUrl(value = "") {
+  return (
+    value.startsWith("file:") ||
+    value.startsWith("prisma+postgres://localhost") ||
+    value.includes("://localhost") ||
+    value.includes("://127.0.0.1")
+  );
+}
+
+function assertSafeSeedEnvironment() {
+  if (process.env.ALLOW_DESTRUCTIVE_SEED === "true") {
+    return;
+  }
+
+  if (process.env.NODE_ENV === "test") {
+    return;
+  }
+
+  const databaseUrls = [process.env.DATABASE_URL, process.env.DATABASE_URL_UNPOOLED].filter(Boolean);
+  if (databaseUrls.length > 0 && databaseUrls.every((url) => isLocalDatabaseUrl(url))) {
+    return;
+  }
+
+  throw new Error(
+    "Refusing to run destructive seed outside local/test. Set ALLOW_DESTRUCTIVE_SEED=true to override deliberately.",
+  );
+}
+
 async function main() {
+  assertSafeSeedEnvironment();
+
   await prisma.review.deleteMany();
   await prisma.message.deleteMany();
   await prisma.comment.deleteMany();
@@ -75,11 +106,27 @@ async function main() {
       address: "Karl Johans gate 12, Oslo",
       date: new Date(Date.now() + 86400000),
       note: "Bytt sengetoy og sjekk badet",
+      details: "Bytt sengetoy, vask badet og kontroller at leiligheten er klar til ny innsjekk.",
       guestCount: 2,
       landlordId: landlord.id,
       assignedToId: worker.id,
     },
   });
+
+  const demoOrders = buildDemoOrderPayloads();
+  for (const order of demoOrders) {
+    await prisma.serviceOrder.create({
+      data: {
+        type: order.type,
+        address: order.address,
+        date: new Date(order.date),
+        note: order.note,
+        details: order.details ?? null,
+        guestCount: order.guestCount ?? null,
+        landlordId: landlord.id,
+      },
+    });
+  }
 
   await prisma.notification.create({
     data: {

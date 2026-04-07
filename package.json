@@ -30,6 +30,8 @@
         "quality:code": "node ./scripts/quality-agent.mjs --no-visual",
         "quality:visual": "node ./scripts/quality-agent.mjs --visual-only",
         "quality:autofix": "node ./scripts/quality-agent.mjs --auto-fix",
+        "demo:filters:live": "node ./scripts/create-filter-demo-orders-live.cjs",
+        "verify:public-filters:live": "node ./scripts/verify-public-home-filters-live.cjs",
         "deploy:preview": "npm run quality:check && npx vercel --yes",
         "deploy:prod": "npm run quality:check && npx vercel --prod --yes",
         "release:android:preview": "npm run quality:check && npx vercel --prod --yes && npm --prefix mobile run build:android:preview",

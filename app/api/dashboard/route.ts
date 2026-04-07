@@ -5,6 +5,7 @@ import { requireAuth } from "@/lib/rbac";
 import { handleApiError } from "@/lib/api";
 import { derivePaymentStatus } from "@/lib/payments/order-payment";
 import { getStartAvailabilityForWorker } from "@/lib/services/order-start-service";
+import { findMatchingServiceTypes, splitSearchTerms } from "@/lib/service-types";
 
 type DashboardSort = "NEWEST_OLDEST" | "OLDEST_NEWEST" | "NEAREST" | "DUE_SOON" | "RECENTLY_ASSIGNED";
 type DashboardView = "active" | "my" | "completed";
@@ -73,20 +74,47 @@ export async function GET(req: Request) {
               ? { assignedToId: session.user.id, status: myStatusWhere }
               : { assignedToId: null, status: OrderStatus.PENDING };
 
-    const searchWhere: Prisma.ServiceOrderWhereInput | null = search
-      ? {
+    const searchWhere: Prisma.ServiceOrderWhereInput | null = (() => {
+      if (!search) return null;
+
+      const matchingTypes = Array.from(
+        new Set([
+          ...findMatchingServiceTypes(search),
+          ...(Object.values(ServiceType).includes(search.toUpperCase() as ServiceType)
+            ? [search.toUpperCase() as ServiceType]
+            : []),
+        ]),
+      );
+      const rawTerms = splitSearchTerms(search);
+      const termClauses = rawTerms.map((term) => {
+        const matchingTypesForTerm = findMatchingServiceTypes(term);
+        return {
           OR: [
-            { address: { contains: search, mode: "insensitive" as const } },
-            { note: { contains: search, mode: "insensitive" as const } },
-            { landlord: { name: { contains: search, mode: "insensitive" as const } } },
-            { assignedTo: { name: { contains: search, mode: "insensitive" as const } } },
-            ...(Object.values(ServiceType).includes(search.toUpperCase() as ServiceType)
-              ? [{ type: search.toUpperCase() as ServiceType }]
-              : []),
-            ...(Number.isFinite(Number(search)) ? [{ orderNumber: Number(search) }] : []),
+            { address: { contains: term, mode: "insensitive" as const } },
+            { note: { contains: term, mode: "insensitive" as const } },
+            { landlord: { name: { contains: term, mode: "insensitive" as const } } },
+            { assignedTo: { name: { contains: term, mode: "insensitive" as const } } },
+            ...matchingTypesForTerm.map((type) => ({ type })),
+            ...(Number.isFinite(Number(term)) ? [{ orderNumber: Number(term) }] : []),
           ],
-        }
-      : null;
+        } satisfies Prisma.ServiceOrderWhereInput;
+      });
+
+      if (termClauses.length > 1) {
+        return { AND: termClauses };
+      }
+
+      return {
+        OR: [
+          { address: { contains: search, mode: "insensitive" as const } },
+          { note: { contains: search, mode: "insensitive" as const } },
+          { landlord: { name: { contains: search, mode: "insensitive" as const } } },
+          { assignedTo: { name: { contains: search, mode: "insensitive" as const } } },
+          ...matchingTypes.map((type) => ({ type })),
+          ...(Number.isFinite(Number(search)) ? [{ orderNumber: Number(search) }] : []),
+        ],
+      };
+    })();
 
     const dateWhere: Prisma.ServiceOrderWhereInput | null =
       dateParam && /^\d{4}-\d{2}-\d{2}$/.test(dateParam)

@@ -29,6 +29,27 @@ describe("/api/dashboard", () => {
     );
   });
 
+  it("matches translated service type aliases in search", async () => {
+    vi.mocked(requireAuth).mockResolvedValue({ user: { id: "l1", role: "UTLEIER" } } as never);
+    vi.mocked(prisma.serviceOrder.count).mockResolvedValue(0 as never);
+    vi.mocked(prisma.serviceOrder.findMany).mockResolvedValue([] as never);
+
+    const res = await getDashboard(new Request("http://localhost/api/dashboard?search=flyttehjelp"));
+    expect(res.status).toBe(200);
+    expect(vi.mocked(prisma.serviceOrder.findMany)).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: {
+          AND: expect.arrayContaining([
+            expect.objectContaining({ landlordId: "l1" }),
+            expect.objectContaining({
+              OR: expect.arrayContaining([expect.objectContaining({ type: "MOVING_CARRYING" })]),
+            }),
+          ]),
+        },
+      }),
+    );
+  });
+
   it("returns completed orders for worker in completed view", async () => {
     vi.mocked(requireAuth).mockResolvedValue({ user: { id: "t1", role: "TJENESTE" } } as never);
     vi.mocked(prisma.serviceOrder.count).mockResolvedValue(0 as never);

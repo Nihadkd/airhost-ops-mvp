@@ -109,6 +109,24 @@ export async function DELETE(_: Request, { params }: { params: Promise<{ id: str
       if (adminCount <= 1) return apiError(409, "Cannot delete last active admin");
     }
 
+    const [ownedOrderCount, assignedStartedOrCompletedOrderCount] = await Promise.all([
+      prisma.serviceOrder.count({ where: { landlordId: id } }),
+      prisma.serviceOrder.count({
+        where: {
+          assignedToId: id,
+          status: { in: ["IN_PROGRESS", "COMPLETED"] },
+        },
+      }),
+    ]);
+
+    if (ownedOrderCount > 0) {
+      return apiError(409, "Cannot delete user who owns orders. Deactivate the user instead.");
+    }
+
+    if (assignedStartedOrCompletedOrderCount > 0) {
+      return apiError(409, "Cannot delete user assigned to started or completed orders. Reassign or resolve them first.");
+    }
+
     await prisma.$transaction(async (tx) => {
       // Keep historic notification rows that reference this actor by nulling actor pointer first.
       await tx.notification.updateMany({
@@ -135,12 +153,13 @@ export async function DELETE(_: Request, { params }: { params: Promise<{ id: str
 
       // Orders where user is assigned should remain, but without assignment.
       await tx.serviceOrder.updateMany({
-        where: { assignedToId: id },
-        data: { assignedToId: null },
+        where: { assignedToId: id, status: "PENDING" },
+        data: {
+          assignedToId: null,
+          assignmentStatus: "UNASSIGNED",
+          status: "PENDING",
+        },
       });
-
-      // Orders where user is landlord are removed together with cascading children.
-      await tx.serviceOrder.deleteMany({ where: { landlordId: id } });
 
       await tx.pushDeviceToken.deleteMany({ where: { userId: id } });
       await tx.user.delete({ where: { id } });

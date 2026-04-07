@@ -33,7 +33,6 @@ export default async function HomePage() {
       status: "PENDING",
     },
     orderBy: { date: "asc" },
-    take: 20,
     select: {
       id: true,
       orderNumber: true,

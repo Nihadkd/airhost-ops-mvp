@@ -104,7 +104,6 @@ export const commentCreateSchema = z.object({
 export const notificationCreateSchema = z.object({
   userId: z.string().min(1),
   message: z.string().min(1).max(240),
-  actorUserId: z.string().min(1).optional(),
   targetUrl: z.string().min(1).max(300).optional(),
 });
 

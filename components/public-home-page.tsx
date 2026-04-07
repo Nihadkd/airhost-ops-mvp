@@ -7,7 +7,13 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useLanguage } from "@/lib/language-context";
 import { inferCity, inferCounty, NORWEGIAN_COUNTIES } from "@/lib/public-job-presentation";
 import { appendReturnTo } from "@/lib/return-to";
-import { getServiceTypeTranslationKey, ORDERABLE_SERVICE_TYPES } from "@/lib/service-types";
+import {
+  getServiceTypeTranslationKey,
+  matchesServiceTypeSearchQuery,
+  normalizeSearchText,
+  ORDERABLE_SERVICE_TYPES,
+  splitSearchTerms,
+} from "@/lib/service-types";
 
 type PublicJob = {
   id: string;
@@ -39,6 +45,15 @@ const FEATURED_CITY_GROUPS = [
     cities: ["Drammen", "Fredrikstad", "Sandnes", "Lillestrom", "Alesund", "Bodo"],
   },
 ] as const;
+
+function formatPublicJobDate(dateValue: string, locale: string) {
+  return new Intl.DateTimeFormat(locale, {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    timeZone: "Europe/Oslo",
+  }).format(new Date(dateValue));
+}
 
 function parseQueryParam(value: string | null) {
   return value?.trim() ?? DEFAULT_QUERY;
@@ -143,10 +158,14 @@ export function PublicHomePage({
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
-  const [query, setQuery] = useState(() => parseQueryParam(searchParams.get("q")));
-  const [selectedType, setSelectedType] = useState<string>(() => parseTypeParam(searchParams.get("type")));
-  const [selectedCounty, setSelectedCounty] = useState<string>(() => parseCountyParam(searchParams.get("county")));
-  const [sortMode, setSortMode] = useState<SortMode>(() => parseSortParam(searchParams.get("sort")));
+  const queryFromUrl = useMemo(() => parseQueryParam(searchParams.get("q")), [searchParams]);
+  const selectedTypeFromUrl = useMemo(() => parseTypeParam(searchParams.get("type")), [searchParams]);
+  const selectedCountyFromUrl = useMemo(() => parseCountyParam(searchParams.get("county")), [searchParams]);
+  const sortModeFromUrl = useMemo(() => parseSortParam(searchParams.get("sort")), [searchParams]);
+  const [query, setQuery] = useState(queryFromUrl);
+  const [selectedType, setSelectedType] = useState<string>(selectedTypeFromUrl);
+  const [selectedCounty, setSelectedCounty] = useState<string>(selectedCountyFromUrl);
+  const [sortMode, setSortMode] = useState<SortMode>(sortModeFromUrl);
   const [menuOpen, setMenuOpen] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
   const { t, lang } = useLanguage();
@@ -189,7 +208,7 @@ export function PublicHomePage({
   }, [t]);
 
   const filteredJobs = useMemo(() => {
-    const normalizedQuery = query.trim().toLowerCase();
+    const queryTerms = splitSearchTerms(query);
 
     return jobs
       .filter((job) => {
@@ -201,20 +220,28 @@ export function PublicHomePage({
           return false;
         }
 
-        if (!normalizedQuery) {
+        if (queryTerms.length === 0) {
           return true;
         }
 
         const translationKey = getServiceTypeTranslationKey(job.type);
-        const typeLabel = translationKey ? t(translationKey).toLowerCase() : job.type.toLowerCase();
+        const typeLabel = translationKey ? t(translationKey) : job.type;
+        const normalizedFields = [
+          normalizeSearchText(job.address),
+          normalizeSearchText(typeLabel),
+          normalizeSearchText(job.note ?? ""),
+          normalizeSearchText(inferCounty(job.address)),
+          normalizeSearchText(inferCity(job.address)),
+          normalizeSearchText(String(job.orderNumber)),
+        ];
 
-        return (
-          job.address.toLowerCase().includes(normalizedQuery) ||
-          typeLabel.includes(normalizedQuery) ||
-          (job.note ?? "").toLowerCase().includes(normalizedQuery) ||
-          inferCounty(job.address).toLowerCase().includes(normalizedQuery) ||
-          inferCity(job.address).toLowerCase().includes(normalizedQuery)
-        );
+        return queryTerms.every((term) => {
+          const normalizedTerm = normalizeSearchText(term);
+          return (
+            normalizedFields.some((field) => field.includes(normalizedTerm)) ||
+            matchesServiceTypeSearchQuery(job.type, term)
+          );
+        });
       })
       .sort((left, right) => {
         const leftTime = new Date(left.date).getTime();
@@ -250,23 +277,18 @@ export function PublicHomePage({
   );
 
   useEffect(() => {
-    const nextQuery = parseQueryParam(searchParams.get("q"));
-    const nextType = parseTypeParam(searchParams.get("type"));
-    const nextCounty = parseCountyParam(searchParams.get("county"));
-    const nextSort = parseSortParam(searchParams.get("sort"));
-
     const syncHandle = window.setTimeout(() => {
-      setQuery((current) => (current === nextQuery ? current : nextQuery));
-      setSelectedType((current) => (current === nextType ? current : nextType));
-      setSelectedCounty((current) => (current === nextCounty ? current : nextCounty));
-      setSortMode((current) => (current === nextSort ? current : nextSort));
+      setQuery((current) => (current === queryFromUrl ? current : queryFromUrl));
+      setSelectedType((current) => (current === selectedTypeFromUrl ? current : selectedTypeFromUrl));
+      setSelectedCounty((current) => (current === selectedCountyFromUrl ? current : selectedCountyFromUrl));
+      setSortMode((current) => (current === sortModeFromUrl ? current : sortModeFromUrl));
     }, 0);
 
     return () => window.clearTimeout(syncHandle);
-  }, [searchParams]);
+  }, [queryFromUrl, selectedCountyFromUrl, selectedTypeFromUrl, sortModeFromUrl]);
 
   useEffect(() => {
-    const nextParams = new URLSearchParams(searchParams.toString());
+    const nextParams = new URLSearchParams();
     const normalizedQuery = query.trim();
 
     if (normalizedQuery) {
@@ -296,10 +318,9 @@ export function PublicHomePage({
     const currentSearch = searchParams.toString();
     const nextSearch = nextParams.toString();
 
-    if (currentSearch !== nextSearch) {
-      router.replace(nextSearch ? `${pathname}?${nextSearch}` : pathname, { scroll: false });
-    }
-  }, [pathname, query, router, searchParams, selectedCounty, selectedType, sortMode]);
+    if (currentSearch === nextSearch) return;
+    window.history.replaceState(window.history.state, "", nextSearch ? `${pathname}?${nextSearch}` : pathname);
+  }, [pathname, query, searchParams, selectedCounty, selectedType, sortMode]);
 
   useEffect(() => {
     if (!menuOpen) return;
@@ -737,7 +758,7 @@ export function PublicHomePage({
                               </div>
                               <div className="px-0 py-1 pr-4 text-[0.82rem] text-slate-900">{inferCounty(job.address)}</div>
                               <div className="px-0 py-1 pr-4 text-[0.82rem] text-slate-900">
-                                {new Date(job.date).toLocaleDateString(locale)}
+                                {formatPublicJobDate(job.date, locale)}
                               </div>
                               <div className="px-0 py-1 text-[0.82rem] text-slate-700">
                                 <p>{note}</p>
@@ -758,10 +779,18 @@ export function PublicHomePage({
                   const note = job.note?.trim() || "Se oppdragsdetaljene for full beskrivelse.";
 
                   return (
-                    <Link
+                    <article
                       key={job.id}
-                      href={getJobHref(job.id)}
-                      className="block rounded-[18px] border border-teal-200 bg-[#f3fbfa] p-3 shadow-sm"
+                      role="link"
+                      tabIndex={0}
+                      onClick={() => router.push(getJobHref(job.id))}
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter" || event.key === " ") {
+                          event.preventDefault();
+                          router.push(getJobHref(job.id));
+                        }
+                      }}
+                      className="block cursor-pointer rounded-[18px] border border-teal-200 bg-[#f3fbfa] p-3 shadow-sm focus:outline-none focus:ring-2 focus:ring-teal-500 focus:ring-offset-2"
                     >
                       <div className="flex items-start justify-between gap-3">
                         <div>
@@ -784,18 +813,16 @@ export function PublicHomePage({
                       <div className="mt-2.5 flex items-end justify-between gap-3">
                         <p className="text-sm font-medium text-slate-500">{inferCity(job.address)}</p>
                         <p className="text-sm text-slate-600">
-                          {new Date(job.date).toLocaleDateString(locale)}
+                          {formatPublicJobDate(job.date, locale)}
                         </p>
                       </div>
-                    </Link>
+                    </article>
                   );
                 })}
               </div>
             </section>
           ) : (
-            <div className="panel rounded-[24px] px-5 py-6 text-sm text-slate-500">
-              Ingen ledige oppdrag matcher filtrene dine akkurat nå.
-            </div>
+            <div className="panel rounded-[24px] px-5 py-6 text-sm text-slate-500">{t("noJobsMatchSearch")}</div>
           )}
         </section>
       </div>

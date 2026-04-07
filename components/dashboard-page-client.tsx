@@ -68,6 +68,10 @@ const initialFilters: Filters = {
   sort: "NEWEST_OLDEST",
 };
 
+function normalizeSearchValue(value: string) {
+  return value.trim();
+}
+
 export function DashboardPageClient() {
   const { t, lang } = useLanguage();
   const locale = lang === "no" ? "nb-NO" : "en-US";
@@ -109,7 +113,8 @@ export function DashboardPageClient() {
 
   const queryString = useMemo(() => {
     const params = new URLSearchParams();
-    if (debouncedFilters.search) params.set("search", debouncedFilters.search);
+    const normalizedSearch = normalizeSearchValue(debouncedFilters.search);
+    if (normalizedSearch) params.set("search", normalizedSearch);
     params.set("sort", debouncedFilters.sort);
     params.set("page", String(page));
     params.set("pageSize", String(pageSize));
@@ -250,6 +255,7 @@ export function DashboardPageClient() {
 
   const role = me?.effectiveRole;
   const isAdmin = role === "ADMIN";
+  const hasActiveFilters = normalizeSearchValue(filters.search).length > 0 || filters.sort !== initialFilters.sort;
   const visibleOrders = useMemo(
     () => orders.filter((order) => order.status === "PENDING" && order.assignedToId === null),
     [orders],
@@ -330,6 +336,8 @@ export function DashboardPageClient() {
           </select>
           <input
             className="input md:col-span-1 lg:col-span-2"
+            type="search"
+            aria-label={t("searchJobs")}
             placeholder={t("searchJobs")}
             value={filters.search}
             onChange={(e) => updateFilter("search", e.target.value)}
@@ -348,7 +356,7 @@ export function DashboardPageClient() {
           {loading && <p className="text-sm text-slate-500">{t("loadingJobs")}</p>}
           {!loading && visibleOrders.length === 0 && (
             <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 px-4 py-6 text-sm text-slate-600">
-              <p className="font-semibold text-slate-800">{t("noJobs")}</p>
+              <p className="font-semibold text-slate-800">{hasActiveFilters ? t("noJobsMatchSearch") : t("noJobs")}</p>
               <p className="mt-1">{role === "TJENESTE" ? t("myOrdersHint") : t("overview")}</p>
             </div>
           )}
@@ -433,7 +441,7 @@ export function DashboardPageClient() {
                 <tr>
                   <td className="py-8 text-slate-500" colSpan={9}>
                     <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 px-4 py-6 text-center">
-                      <p className="font-semibold text-slate-800">{t("noJobs")}</p>
+                      <p className="font-semibold text-slate-800">{hasActiveFilters ? t("noJobsMatchSearch") : t("noJobs")}</p>
                       <p className="mt-1 text-sm text-slate-500">{role === "TJENESTE" ? t("myOrdersHint") : t("overview")}</p>
                     </div>
                   </td>
