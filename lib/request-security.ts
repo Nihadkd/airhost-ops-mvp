@@ -2,40 +2,69 @@ import { NextResponse } from "next/server";
 import { ApiRouteError } from "@/lib/api";
 import { env } from "@/lib/env";
 
-function getConfiguredAppOrigin() {
-  const baseUrl = env.APP_BASE_URL ?? env.NEXTAUTH_URL ?? (env.VERCEL_URL ? `https://${env.VERCEL_URL}` : "");
-  if (!baseUrl) {
+function normalizeOrigin(value: string | null | undefined) {
+  if (!value) {
     return "";
   }
 
   try {
-    return new URL(baseUrl).origin;
+    return new URL(value).origin;
   } catch {
     return "";
   }
 }
 
+function getConfiguredAppOrigin() {
+  const baseUrl = env.APP_BASE_URL ?? env.NEXTAUTH_URL ?? (env.VERCEL_URL ? `https://${env.VERCEL_URL}` : "");
+  return normalizeOrigin(baseUrl);
+}
+
+function getForwardedRequestOrigin(request: Request) {
+  const forwardedHost = request.headers.get("x-forwarded-host")?.split(",")[0]?.trim();
+  const host = forwardedHost || request.headers.get("host")?.trim();
+  if (!host) {
+    return "";
+  }
+
+  const forwardedProto = request.headers.get("x-forwarded-proto")?.split(",")[0]?.trim();
+  const requestOrigin = normalizeOrigin(request.url);
+  const protocol = forwardedProto || (requestOrigin.startsWith("https://") ? "https" : "http");
+
+  return normalizeOrigin(`${protocol}://${host}`);
+}
+
+function getSourceOrigin(request: Request) {
+  const origin = request.headers.get("origin")?.trim();
+  if (origin && origin !== "null") {
+    return origin;
+  }
+
+  return normalizeOrigin(request.headers.get("referer")?.trim());
+}
+
 export function getTrustedOrigins(request: Request) {
   const allowedOrigins = new Set<string>();
   const configuredOrigin = getConfiguredAppOrigin();
+  const requestOrigin = normalizeOrigin(request.url);
+  const forwardedRequestOrigin = getForwardedRequestOrigin(request);
 
   if (configuredOrigin) {
     allowedOrigins.add(configuredOrigin);
   }
 
-  if (env.NODE_ENV !== "production") {
-    try {
-      allowedOrigins.add(new URL(request.url).origin);
-    } catch {
-      // Ignore malformed request URLs and fall back to configured origins only.
-    }
+  if (requestOrigin) {
+    allowedOrigins.add(requestOrigin);
+  }
+
+  if (forwardedRequestOrigin) {
+    allowedOrigins.add(forwardedRequestOrigin);
   }
 
   return allowedOrigins;
 }
 
 export function requireTrustedOrigin(request: Request) {
-  const origin = request.headers.get("origin")?.trim();
+  const origin = getSourceOrigin(request);
   const trustedOrigins = getTrustedOrigins(request);
 
   if (!origin) {
@@ -59,7 +88,7 @@ export function assertTrustedOrigin(
   request: Request,
   options?: { allowMissingOriginInNonProduction?: boolean },
 ) {
-  const origin = request.headers.get("origin")?.trim();
+  const origin = getSourceOrigin(request);
   const trustedOrigins = getTrustedOrigins(request);
 
   if (!origin) {
