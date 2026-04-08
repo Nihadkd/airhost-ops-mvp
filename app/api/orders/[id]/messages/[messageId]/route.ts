@@ -4,11 +4,11 @@ import { requireAuth } from "@/lib/rbac";
 import { apiError, handleApiError } from "@/lib/api";
 
 export async function DELETE(
-  _: Request,
+  req: Request,
   { params }: { params: Promise<{ id: string; messageId: string }> },
 ) {
   try {
-    const session = await requireAuth();
+    const session = await requireAuth({ request: req, requireTrustedOrigin: true });
     const isAdmin = session.user.accountRole === "ADMIN" || session.user.role === "ADMIN";
 
     const { id, messageId } = await params;

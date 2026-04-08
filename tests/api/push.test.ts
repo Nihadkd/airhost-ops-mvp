@@ -57,7 +57,7 @@ describe("push diagnostics", () => {
       errors: [],
     });
 
-    const res = await postTestPush();
+    const res = await postTestPush(new Request("http://localhost/api/users/me/test-push", { method: "POST" }));
     const data = await res.json();
     expect(res.status).toBe(200);
     expect(vi.mocked(sendPushToUser)).toHaveBeenCalledWith(

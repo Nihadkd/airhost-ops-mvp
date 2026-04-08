@@ -84,7 +84,15 @@ export default function RegisterPage() {
           </span>
         </label>
         {error && <p className="text-sm text-red-600">{error}</p>}
-        {success && <p className="text-sm text-teal-700">{success}</p>}
+        {success ? (
+          <p
+            role="status"
+            aria-live="polite"
+            className="rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-800"
+          >
+            {success}
+          </p>
+        ) : null}
         <button className="btn btn-primary w-full" type="submit" disabled={loading}>
           {loading ? "..." : t("register")}
         </button>

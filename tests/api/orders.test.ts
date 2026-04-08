@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
-vi.mock("@/lib/rbac", () => ({ requireAuth: vi.fn(), requireRole: vi.fn() }));
+vi.mock("@/lib/rbac", () => ({ requireAuth: vi.fn(), requireRole: vi.fn(), requireRoleWithRequest: vi.fn() }));
 vi.mock("@/lib/push", () => ({ sendPushToUser: vi.fn() }));
 vi.mock("@/lib/sms", () => ({ sendAssignedOrderSms: vi.fn() }));
 vi.mock("@/lib/prisma", () => ({

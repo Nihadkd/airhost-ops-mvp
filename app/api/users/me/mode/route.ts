@@ -7,7 +7,7 @@ import { modeSwitchSchema } from "@/lib/validators";
 
 export async function PUT(req: Request) {
   try {
-    const session = await requireAuth();
+    const session = await requireAuth({ request: req, requireTrustedOrigin: true });
 
     const body = await req.json();
     const data = modeSwitchSchema.parse(body);

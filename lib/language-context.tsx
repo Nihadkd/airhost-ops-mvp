@@ -65,7 +65,8 @@ const messages: Record<AppLanguage, Record<string, string>> = {
     verifyEmailSuccess: "E-post er bekreftet. Du kan nå logge inn.",
     verificationFailed: "Verifisering feilet eller lenken er utløpt.",
     invalidVerificationLink: "Ugyldig verifiseringslenke.",
-    registerVerifyEmailSent: "Vi har sendt deg en e-post for å bekrefte kontoen før innlogging.",
+    registerVerifyEmailSent:
+      "Sjekk e-posten din for å bekrefte kontoen. Husk å sjekke både søppelpost og spam hvis du ikke ser meldingen med en gang.",
     backToLogin: "Tilbake til innlogging",
     email: "E-post",
     phone: "Telefon",
@@ -530,7 +531,8 @@ const messages: Record<AppLanguage, Record<string, string>> = {
     verifyEmailSuccess: "Email verified. You can sign in now.",
     verificationFailed: "Verification failed or link has expired.",
     invalidVerificationLink: "Invalid verification link.",
-    registerVerifyEmailSent: "We sent you an email to verify your account before sign-in.",
+    registerVerifyEmailSent:
+      "Check your email to verify your account. If you do not see the message right away, check both spam and junk folders.",
     backToLogin: "Back to sign in",
     email: "Email",
     phone: "Phone",

@@ -3,6 +3,8 @@ import { prisma } from "@/lib/prisma";
 import { env, hasMailConfiguration } from "@/lib/env";
 import { sendPasswordResetEmail } from "@/lib/auth-email";
 import { signToken } from "@/lib/secure-token";
+import { enforceRateLimit } from "@/lib/rate-limit";
+import { getClientIp, requireTrustedOrigin } from "@/lib/request-security";
 
 type ResetRequestPayload = {
   type: "reset_password";
@@ -15,6 +17,22 @@ type ResetRequestPayload = {
 
 export async function POST(req: Request) {
   try {
+    const originError = requireTrustedOrigin(req);
+    if (originError) {
+      return originError;
+    }
+
+    const rateLimitError = enforceRateLimit({
+      key: `reset-password:${getClientIp(req)}`,
+      limit: 5,
+      windowMs: 15 * 60 * 1000,
+      code: "RESET_RATE_LIMITED",
+      message: "Too many password reset attempts. Please wait and try again.",
+    });
+    if (rateLimitError) {
+      return rateLimitError;
+    }
+
     const body = (await req.json().catch(() => null)) as { email?: string } | null;
     const email = String(body?.email ?? "").trim().toLowerCase();
     if (!email) {

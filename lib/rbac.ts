@@ -1,6 +1,7 @@
 import { Role } from "@prisma/client";
 import { cookies } from "next/headers";
 import { auth } from "@/lib/auth";
+import { assertTrustedOrigin } from "@/lib/request-security";
 import { ADMIN_VIEW_COOKIE, type AdminViewMode, resolveUserRole } from "@/lib/user-role";
 
 type SessionWithRole = {
@@ -17,7 +18,17 @@ type SessionWithRole = {
   };
 };
 
-export async function requireAuth(_opts?: { allowWithoutLegalConsent?: boolean }): Promise<SessionWithRole> {
+type RequireAuthOptions = {
+  allowWithoutLegalConsent?: boolean;
+  request?: Request;
+  requireTrustedOrigin?: boolean;
+};
+
+export async function requireAuth(opts?: RequireAuthOptions): Promise<SessionWithRole> {
+  if (opts?.requireTrustedOrigin && opts.request) {
+    assertTrustedOrigin(opts.request, { allowMissingOriginInNonProduction: true });
+  }
+
   const session = await auth();
   if (!session?.user?.id) {
     throw new Error("UNAUTHORIZED");
@@ -53,6 +64,17 @@ export async function requireAuth(_opts?: { allowWithoutLegalConsent?: boolean }
 
 export async function requireRole(roles: Role[]) {
   const session = await requireAuth();
+  if (session.user.accountRole === Role.ADMIN) {
+    return session;
+  }
+  if (!roles.includes(session.user.role)) {
+    throw new Error("FORBIDDEN");
+  }
+  return session;
+}
+
+export async function requireRoleWithRequest(roles: Role[], request: Request) {
+  const session = await requireAuth({ request, requireTrustedOrigin: true });
   if (session.user.accountRole === Role.ADMIN) {
     return session;
   }

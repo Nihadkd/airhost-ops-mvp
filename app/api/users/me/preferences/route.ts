@@ -6,7 +6,7 @@ import { userUpdateSchema } from "@/lib/validators";
 
 export async function PUT(req: Request) {
   try {
-    const session = await requireAuth();
+    const session = await requireAuth({ request: req, requireTrustedOrigin: true });
     const body = await req.json();
     const parsed = userUpdateSchema.safeParse(body);
     if (!parsed.success) return apiError(400, "Invalid payload");
@@ -29,4 +29,3 @@ export async function PUT(req: Request) {
     return handleApiError(error);
   }
 }
-

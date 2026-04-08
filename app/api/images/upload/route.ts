@@ -7,7 +7,7 @@ import { saveUpload } from "@/lib/upload";
 
 export async function POST(req: Request) {
   try {
-    const session = await requireAuth();
+    const session = await requireAuth({ request: req, requireTrustedOrigin: true });
     const isAdmin = session.user.accountRole === "ADMIN" || session.user.role === "ADMIN";
     const isWorker = session.user.role === "TJENESTE";
     const isLandlord = session.user.role === "UTLEIER";

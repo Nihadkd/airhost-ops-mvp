@@ -6,7 +6,7 @@ import { pushTokenSchema } from "@/lib/validators";
 
 export async function POST(req: Request) {
   try {
-    const session = await requireAuth();
+    const session = await requireAuth({ request: req, requireTrustedOrigin: true });
     const body = await req.json();
     const parsed = pushTokenSchema.safeParse(body);
     if (!parsed.success) return apiError(400, "Invalid payload");
@@ -42,7 +42,7 @@ export async function POST(req: Request) {
 
 export async function DELETE(req: Request) {
   try {
-    const session = await requireAuth();
+    const session = await requireAuth({ request: req, requireTrustedOrigin: true });
     const body = await req.json().catch(() => null) as { token?: string } | null;
     const token = body?.token?.trim();
     if (!token) return apiError(400, "token is required");

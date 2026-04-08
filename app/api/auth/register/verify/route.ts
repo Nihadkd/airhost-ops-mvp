@@ -1,6 +1,7 @@
 import { ProfileMode, Role } from "@prisma/client";
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { requireTrustedOrigin } from "@/lib/request-security";
 import { verifyToken } from "@/lib/secure-token";
 
 type RegisterVerifyToken = {
@@ -22,6 +23,11 @@ type RegisterVerifyToken = {
 
 export async function POST(req: Request) {
   try {
+    const originError = requireTrustedOrigin(req);
+    if (originError) {
+      return originError;
+    }
+
     const body = (await req.json().catch(() => null)) as { token?: string } | null;
     const token = body?.token?.trim();
     if (!token) {

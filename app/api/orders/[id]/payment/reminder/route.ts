@@ -7,9 +7,9 @@ import { notifyUserEvent } from "@/lib/user-event-notifications";
 
 type RouteContext = { params: Promise<Record<string, string | string[] | undefined>> };
 
-export async function POST(_: Request, { params }: RouteContext) {
+export async function POST(req: Request, { params }: RouteContext) {
   try {
-    const session = await requireAuth();
+    const session = await requireAuth({ request: req, requireTrustedOrigin: true });
     const id = String((await params).id ?? "");
 
     const order = await prisma.serviceOrder.findUnique({

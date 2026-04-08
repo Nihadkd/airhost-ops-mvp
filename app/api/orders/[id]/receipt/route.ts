@@ -40,7 +40,7 @@ export async function GET(_: Request, { params }: { params: Promise<{ id: string
 
 export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
-    const session = await requireAuth();
+    const session = await requireAuth({ request: req, requireTrustedOrigin: true });
     const { id } = await params;
     const access = await canAccessOrder(id, session.user.id, session.user.role, session.user.accountRole);
     if (!access.ok || !access.order) return apiError(403, "Forbidden");

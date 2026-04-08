@@ -30,9 +30,13 @@ import { hasMailConfiguration } from "@/lib/env";
 import { POST as requestReset } from "@/app/api/auth/reset-password/request/route";
 import { POST as confirmReset } from "@/app/api/auth/reset-password/confirm/route";
 import { signToken } from "@/lib/secure-token";
+import { resetRateLimitStoreForTests } from "@/lib/rate-limit";
 
 describe("password reset via email flow", () => {
-  beforeEach(() => vi.clearAllMocks());
+  beforeEach(() => {
+    vi.clearAllMocks();
+    resetRateLimitStoreForTests();
+  });
 
   it("accepts reset request without disclosing user existence", async () => {
     vi.mocked(prisma.user.findFirst).mockResolvedValue(null as never);
@@ -43,7 +47,7 @@ describe("password reset via email flow", () => {
         body: JSON.stringify({ email: "x@example.com" }),
       }),
     );
-    expect(res.status).toBe(200);
+    expect(res.status).toBe(403);
   });
 
   it("returns a debug reset link in non-production when mail is not configured", async () => {
@@ -57,7 +61,11 @@ describe("password reset via email flow", () => {
     const res = await requestReset(
       new Request("http://localhost/api/auth/reset-password/request", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          Origin: "http://localhost:3000",
+          "x-forwarded-for": "127.0.0.1",
+        },
         body: JSON.stringify({ email: "x@example.com" }),
       }),
     );
@@ -69,6 +77,55 @@ describe("password reset via email flow", () => {
         debugResetUrl: expect.stringContaining("/forgot-password?token="),
       }),
     );
+  });
+
+  it("accepts reset request from a trusted origin without disclosing user existence", async () => {
+    vi.mocked(prisma.user.findFirst).mockResolvedValue(null as never);
+    const res = await requestReset(
+      new Request("http://localhost/api/auth/reset-password/request", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Origin: "http://localhost:3000",
+          "x-forwarded-for": "127.0.0.1",
+        },
+        body: JSON.stringify({ email: "x@example.com" }),
+      }),
+    );
+    expect(res.status).toBe(200);
+  });
+
+  it("rate limits repeated reset requests from the same ip", async () => {
+    vi.mocked(prisma.user.findFirst).mockResolvedValue(null as never);
+
+    for (let index = 0; index < 5; index += 1) {
+      const res = await requestReset(
+        new Request("http://localhost/api/auth/reset-password/request", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Origin: "http://localhost:3000",
+            "x-forwarded-for": "127.0.0.1",
+          },
+          body: JSON.stringify({ email: `x${index}@example.com` }),
+        }),
+      );
+      expect(res.status).toBe(200);
+    }
+
+    const blocked = await requestReset(
+      new Request("http://localhost/api/auth/reset-password/request", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Origin: "http://localhost:3000",
+          "x-forwarded-for": "127.0.0.1",
+        },
+        body: JSON.stringify({ email: "blocked@example.com" }),
+      }),
+    );
+
+    expect(blocked.status).toBe(429);
   });
 
   it("updates password on valid reset token", async () => {
@@ -83,11 +140,36 @@ describe("password reset via email flow", () => {
     const res = await confirmReset(
       new Request("http://localhost/api/auth/reset-password/confirm", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          Origin: "http://localhost:3000",
+        },
         body: JSON.stringify({ token, password: "newPassword123" }),
       }),
     );
     expect(res.status).toBe(200);
     expect(vi.mocked(prisma.user.update)).toHaveBeenCalled();
+  });
+
+  it("blocks reset confirmation from an untrusted origin", async () => {
+    const token = signToken({
+      type: "reset_password",
+      exp: Date.now() + 1000 * 60,
+      payload: { userId: "u1", email: "x@example.com" },
+    });
+
+    const res = await confirmReset(
+      new Request("http://localhost/api/auth/reset-password/confirm", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Origin: "https://evil.example",
+        },
+        body: JSON.stringify({ token, password: "newPassword123" }),
+      }),
+    );
+
+    expect(res.status).toBe(403);
+    expect(vi.mocked(prisma.user.update)).not.toHaveBeenCalled();
   });
 });

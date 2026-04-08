@@ -9,7 +9,7 @@ import { notifyUserEvent } from "@/lib/user-event-notifications";
 
 export async function PUT(req: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
-    const session = await requireAuth();
+    const session = await requireAuth({ request: req, requireTrustedOrigin: true });
     const isAdmin = session.user.accountRole === "ADMIN" || session.user.role === "ADMIN";
     const { id } = await params;
     const body = await req.json().catch(() => ({}));

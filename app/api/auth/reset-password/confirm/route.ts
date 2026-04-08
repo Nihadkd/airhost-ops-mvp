@@ -1,6 +1,7 @@
 import bcrypt from "bcryptjs";
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { requireTrustedOrigin } from "@/lib/request-security";
 import { verifyToken } from "@/lib/secure-token";
 import { resetPasswordSchema } from "@/lib/validators";
 
@@ -15,6 +16,11 @@ type ResetConfirmToken = {
 
 export async function POST(req: Request) {
   try {
+    const originError = requireTrustedOrigin(req);
+    if (originError) {
+      return originError;
+    }
+
     const body = (await req.json().catch(() => null)) as { token?: string; password?: string } | null;
     const token = String(body?.token ?? "").trim();
     const password = String(body?.password ?? "");

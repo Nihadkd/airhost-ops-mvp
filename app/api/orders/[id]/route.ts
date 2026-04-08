@@ -72,7 +72,7 @@ export async function GET(_: Request, { params }: { params: Promise<{ id: string
 
 export async function PUT(req: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
-    const session = await requireAuth();
+    const session = await requireAuth({ request: req, requireTrustedOrigin: true });
     const isAdminAccount = session.user.accountRole === "ADMIN";
     const { id } = await params;
     const access = await canView(id, session.user.id, session.user.role, isAdminAccount);
@@ -172,9 +172,9 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
   }
 }
 
-export async function DELETE(_: Request, { params }: { params: Promise<{ id: string }> }) {
+export async function DELETE(req: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
-    const session = await requireAuth();
+    const session = await requireAuth({ request: req, requireTrustedOrigin: true });
     const isAdminAccount = session.user.accountRole === "ADMIN";
     const { id } = await params;
     const order = await prisma.serviceOrder.findUnique({

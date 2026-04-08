@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { requireRole } from "@/lib/rbac";
+import { requireRoleWithRequest } from "@/lib/rbac";
 import { apiError, handleApiError } from "@/lib/api";
 import { assignSchema } from "@/lib/validators";
 import { sendAssignedOrderSms } from "@/lib/sms";
@@ -10,7 +10,7 @@ import { notifyUserEvent } from "@/lib/user-event-notifications";
 
 export async function PUT(req: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
-    await requireRole(["ADMIN"]);
+    await requireRoleWithRequest(["ADMIN"], req);
     const { id } = await params;
     const body = await req.json();
     const data = assignSchema.parse(body);

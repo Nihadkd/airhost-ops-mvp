@@ -37,7 +37,7 @@ export async function GET(_: Request, { params }: { params: Promise<{ id: string
 
 export async function PUT(req: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
-    const session = await requireAuth();
+    const session = await requireAuth({ request: req, requireTrustedOrigin: true });
     const isAdmin = session.user.accountRole === "ADMIN" || session.user.role === "ADMIN";
     const { id } = await params;
     const body = await req.json();
@@ -90,9 +90,9 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
   }
 }
 
-export async function DELETE(_: Request, { params }: { params: Promise<{ id: string }> }) {
+export async function DELETE(req: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
-    const session = await requireAuth();
+    const session = await requireAuth({ request: req, requireTrustedOrigin: true });
     const isAdmin = session.user.accountRole === "ADMIN" || session.user.role === "ADMIN";
     if (!isAdmin) return apiError(403, "Forbidden");
     const { id } = await params;

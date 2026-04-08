@@ -3,9 +3,9 @@ import { requireAuth } from "@/lib/rbac";
 import { handleApiError } from "@/lib/api";
 import { sendPushToUser } from "@/lib/push";
 
-export async function POST() {
+export async function POST(req: Request) {
   try {
-    const session = await requireAuth();
+    const session = await requireAuth({ request: req, requireTrustedOrigin: true });
     const result = await sendPushToUser(session.user.id, {
       title: "ServNest testvarsel",
       body: "Dette er en test av lyd og push-varsler.",

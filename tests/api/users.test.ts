@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
-vi.mock("@/lib/rbac", () => ({ requireRole: vi.fn() }));
+vi.mock("@/lib/rbac", () => ({ requireRole: vi.fn(), requireRoleWithRequest: vi.fn() }));
 vi.mock("@/lib/prisma", () => ({
   prisma: {
     user: {

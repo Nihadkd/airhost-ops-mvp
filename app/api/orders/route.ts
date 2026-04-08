@@ -42,7 +42,7 @@ export async function GET() {
 
 export async function POST(req: Request) {
   try {
-    const session = await requireAuth();
+    const session = await requireAuth({ request: req, requireTrustedOrigin: true });
     const isAdmin = session.user.accountRole === "ADMIN" || session.user.role === "ADMIN";
     if (session.user.role !== "UTLEIER" && !isAdmin) {
       return apiError(403, "Only landlord/admin can create orders");

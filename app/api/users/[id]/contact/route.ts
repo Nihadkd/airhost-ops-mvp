@@ -8,7 +8,7 @@ import { notifyUserEvent } from "@/lib/user-event-notifications";
 
 export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
-    const session = await requireAuth();
+    const session = await requireAuth({ request: req, requireTrustedOrigin: true });
     const { id } = await params;
     if (id === session.user.id) return apiError(400, "Cannot message yourself");
 

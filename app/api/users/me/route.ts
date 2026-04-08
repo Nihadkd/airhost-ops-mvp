@@ -35,7 +35,7 @@ export async function GET() {
 
 export async function PUT(req: Request) {
   try {
-    const session = await requireAuth();
+    const session = await requireAuth({ request: req, requireTrustedOrigin: true });
     const body = await req.json();
     const parsed = meProfileUpdateSchema.safeParse(body);
     if (!parsed.success) return apiError(400, "Invalid payload");
@@ -70,9 +70,9 @@ export async function PUT(req: Request) {
   }
 }
 
-export async function DELETE() {
+export async function DELETE(req: Request) {
   try {
-    const session = await requireAuth();
+    const session = await requireAuth({ request: req, requireTrustedOrigin: true });
 
     await prisma.user.update({
       where: { id: session.user.id },

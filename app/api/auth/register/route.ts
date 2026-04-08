@@ -7,6 +7,8 @@ import { registerSchema } from "@/lib/validators";
 import { hasMailConfiguration } from "@/lib/env";
 import { signToken } from "@/lib/secure-token";
 import { sendRegistrationVerificationEmail } from "@/lib/auth-email";
+import { enforceRateLimit } from "@/lib/rate-limit";
+import { getClientIp, requireTrustedOrigin } from "@/lib/request-security";
 
 type RegisterVerifyPayload = {
   type: "register";
@@ -27,6 +29,22 @@ type RegisterVerifyPayload = {
 
 export async function POST(req: Request) {
   try {
+    const originError = requireTrustedOrigin(req);
+    if (originError) {
+      return originError;
+    }
+
+    const rateLimitError = enforceRateLimit({
+      key: `register:${getClientIp(req)}`,
+      limit: 5,
+      windowMs: 15 * 60 * 1000,
+      code: "REGISTER_RATE_LIMITED",
+      message: "Too many registration attempts. Please wait and try again.",
+    });
+    if (rateLimitError) {
+      return rateLimitError;
+    }
+
     if (!hasMailConfiguration()) {
       return NextResponse.json({ code: "MAIL_NOT_CONFIGURED", error: "Email service unavailable" }, { status: 503 });
     }
