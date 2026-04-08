@@ -761,7 +761,7 @@ export function PublicHomePage({
                                 {formatPublicJobDate(job.date, locale)}
                               </div>
                               <div className="px-0 py-1 text-[0.82rem] text-slate-700">
-                                <p>{note}</p>
+                                <p className="whitespace-pre-wrap break-words">{note}</p>
                               </div>
                             </div>
                           </td>
@@ -800,7 +800,9 @@ export function PublicHomePage({
                           {inferCounty(job.address)}
                         </span>
                       </div>
-                      <p className="mt-2.5 text-[0.95rem] font-semibold text-slate-900">{note}</p>
+                      <p className="mt-2.5 whitespace-pre-wrap break-words text-[0.95rem] font-semibold text-slate-900">
+                        {note}
+                      </p>
                       <a
                         href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(job.address)}`}
                         target="_blank"

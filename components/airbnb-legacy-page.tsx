@@ -383,7 +383,9 @@ export function AirbnbLegacyPage({
                   </div>
                   <StatusBadge status="PENDING" />
                 </div>
-                <p className="mt-3 text-base font-semibold text-slate-900">{job.note ?? "Airbnb tjenester"}</p>
+                <p className="mt-3 whitespace-pre-wrap break-words text-base font-semibold text-slate-900">
+                  {job.note ?? "Airbnb tjenester"}
+                </p>
                 <a
                   href={mapUrl(job.address)}
                   target="_blank"

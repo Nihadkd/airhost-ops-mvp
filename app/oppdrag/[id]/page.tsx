@@ -221,7 +221,9 @@ export default async function PublicJobDetailPage({
             ) : null}
           </div>
 
-          <h1 className="mt-5 text-3xl font-black leading-tight text-slate-900">{summary}</h1>
+          <h1 className="mt-5 whitespace-pre-wrap break-words text-3xl font-black leading-tight text-slate-900">
+            {summary}
+          </h1>
           <p className="mt-2 text-sm text-slate-600">
             {typeLabel} | {job.address}
           </p>
@@ -320,7 +322,7 @@ export default async function PublicJobDetailPage({
 
           <div className="mt-4 rounded-2xl bg-slate-50 px-4 py-4">
             <p className="text-[11px] font-black uppercase tracking-[0.18em] text-slate-500">Hva jobben innebærer</p>
-            <p className="mt-2 whitespace-pre-line text-base font-medium leading-7 text-slate-800">
+            <p className="mt-2 whitespace-pre-wrap break-words text-base font-medium leading-7 text-slate-800">
               {details || "Detaljert beskrivelse kommer her."}
             </p>
           </div>

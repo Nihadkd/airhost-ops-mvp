@@ -1102,7 +1102,9 @@ export function OrderDetailClient({
             )}
           </div>
         )}
-        {order.note && <p className="mt-2 rounded bg-slate-100 p-2 text-sm">{order.note}</p>}
+        {order.note && (
+          <p className="mt-2 rounded bg-slate-100 p-2 text-sm whitespace-pre-wrap break-words">{order.note}</p>
+        )}
         {workerPendingStart && (
           <div className="mt-3 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm font-semibold text-amber-900">
             {t("orderStartRequiredHint")}
