@@ -73,7 +73,6 @@ export function VersionRefresh({ initialVersion }: { initialVersion: string }) {
       void checkVersion();
     };
 
-    void checkVersion();
     window.addEventListener("focus", onFocus);
     window.addEventListener("pageshow", onPageShow);
     document.addEventListener("visibilitychange", onFocus);

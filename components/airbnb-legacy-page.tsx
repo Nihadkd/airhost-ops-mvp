@@ -100,7 +100,7 @@ export function AirbnbLegacyPage({
   }, [menuOpen]);
 
   useEffect(() => {
-    if (!isAuthenticated) return;
+    if (!isAuthenticated || !menuOpen) return;
     let mounted = true;
 
     const refreshUnreadCount = async () => {
@@ -132,7 +132,7 @@ export function AirbnbLegacyPage({
       window.removeEventListener("focus", onFocus);
       document.removeEventListener("visibilitychange", onFocus);
     };
-  }, [isAuthenticated]);
+  }, [isAuthenticated, menuOpen]);
 
   const mapUrl = (address: string) =>
     `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(address)}`;

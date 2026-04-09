@@ -2,8 +2,7 @@ import type { Metadata } from "next";
 import { AirbnbLegacyPage } from "@/components/airbnb-legacy-page";
 import { auth } from "@/lib/auth";
 import { buildMetadata } from "@/lib/seo";
-import { prisma } from "@/lib/prisma";
-import { splitOrderNote } from "@/lib/order-deadline";
+import { getCachedPublicAirbnbJobs } from "@/lib/public-job-cache";
 import { resolveUserRole } from "@/lib/user-role";
 
 export const metadata: Metadata = buildMetadata({
@@ -17,39 +16,12 @@ export const metadata: Metadata = buildMetadata({
 export const dynamic = "force-dynamic";
 
 export default async function AirbnbPage() {
-  const session = await auth();
-  const resolved = session?.user?.id ? await resolveUserRole(session.user.id).catch(() => null) : null;
-  const jobs = await prisma.serviceOrder.findMany({
-    where: {
-      assignedToId: null,
-      status: "PENDING",
-      type: "KEY_HANDLING",
-    },
-    orderBy: { date: "asc" },
-    select: {
-      id: true,
-      orderNumber: true,
-      address: true,
-      date: true,
-      createdAt: true,
-      updatedAt: true,
-      note: true,
-      details: true,
-      guestCount: true,
-      landlord: { select: { name: true } },
-    },
-  });
+  const sessionPromise = auth();
+  const publicJobsPromise = getCachedPublicAirbnbJobs();
 
-  const publicJobs = jobs.map((job) => {
-    const split = splitOrderNote(job.note);
-    return {
-      ...job,
-      date: job.date.toISOString(),
-      createdAt: job.createdAt.toISOString(),
-      updatedAt: job.updatedAt.toISOString(),
-      note: split.note,
-    };
-  });
+  const session = await sessionPromise;
+  const resolvedPromise = session?.user?.id ? resolveUserRole(session.user.id).catch(() => null) : Promise.resolve(null);
+  const [publicJobs, resolved] = await Promise.all([publicJobsPromise, resolvedPromise]);
 
   return (
     <AirbnbLegacyPage

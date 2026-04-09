@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAuth } from "@/lib/rbac";
 import { handleApiError, apiError } from "@/lib/api";
+import { revalidatePublicJobListings } from "@/lib/public-job-cache";
 import { userUpdateSchema } from "@/lib/validators";
 
 export async function GET(_: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -165,6 +166,7 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
       await tx.user.delete({ where: { id } });
     });
 
+    revalidatePublicJobListings();
     return NextResponse.json({ success: true });
   } catch (error) {
     return handleApiError(error);

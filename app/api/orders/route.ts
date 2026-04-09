@@ -6,6 +6,7 @@ import { apiError, handleApiError } from "@/lib/api";
 import { orderCreateSchema } from "@/lib/validators";
 import { sendOrderCreatedEmail } from "@/lib/email-notifications";
 import { withDeadlineMetadata } from "@/lib/order-deadline";
+import { revalidatePublicJobListings } from "@/lib/public-job-cache";
 import { isGuestCountServiceType } from "@/lib/service-types";
 import { notifyUserEvent } from "@/lib/user-event-notifications";
 
@@ -154,6 +155,7 @@ export async function POST(req: Request) {
       });
     }
 
+    revalidatePublicJobListings();
     return NextResponse.json(order, { status: 201 });
   } catch (error) {
     return handleApiError(error);

@@ -5,6 +5,7 @@ import { apiError, handleApiError } from "@/lib/api";
 import { assignmentStatuses } from "@/lib/order-assignment";
 import { orderAssignmentActionSchema } from "@/lib/validators";
 import { sendAssignmentCancelledEmail } from "@/lib/email-notifications";
+import { revalidatePublicJobListings } from "@/lib/public-job-cache";
 import { notifyUserEvent } from "@/lib/user-event-notifications";
 
 export async function PUT(req: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -118,6 +119,7 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
     }
     await Promise.all(notifications);
 
+    revalidatePublicJobListings();
     const updated = await prisma.serviceOrder.findUnique({ where: { id } });
     return NextResponse.json(updated);
   } catch (error) {

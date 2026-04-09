@@ -8,6 +8,7 @@ import { getStartAvailabilityForWorker, startOrderForWorker } from "@/lib/servic
 import { orderUpdateSchema } from "@/lib/validators";
 import { sendOrderCompletedEmail } from "@/lib/email-notifications";
 import { extractDeadlineAt, splitOrderNote, withDeadlineMetadata } from "@/lib/order-deadline";
+import { revalidatePublicJobListings } from "@/lib/public-job-cache";
 import { notifyUserEvent } from "@/lib/user-event-notifications";
 
 async function canView(orderId: string, userId: string, role: string, isAdminAccount: boolean) {
@@ -134,6 +135,7 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
     }
 
     const updated = await prisma.serviceOrder.update({ where: { id }, data });
+    revalidatePublicJobListings();
 
     if (session.user.role === "TJENESTE" && parsed.data.status === "COMPLETED") {
       const doneMessage = `Oppdrag #${access.order.orderNumber} er utført og klart for betaling.`;
@@ -209,6 +211,7 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
     }
 
     await prisma.serviceOrder.delete({ where: { id } });
+    revalidatePublicJobListings();
     return NextResponse.json({ success: true });
   } catch (error) {
     return handleApiError(error);

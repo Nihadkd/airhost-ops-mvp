@@ -334,7 +334,7 @@ export function PublicHomePage({
   }, [menuOpen]);
 
   useEffect(() => {
-    if (!isAuthenticated) return;
+    if (!isAuthenticated || !menuOpen) return;
     let mounted = true;
 
     const refreshUnreadCount = async () => {
@@ -366,7 +366,7 @@ export function PublicHomePage({
       window.removeEventListener("focus", onFocus);
       document.removeEventListener("visibilitychange", onFocus);
     };
-  }, [isAuthenticated]);
+  }, [isAuthenticated, menuOpen]);
 
   return (
     <main className="min-h-screen bg-[linear-gradient(180deg,#f4fbfb_0%,#eff6f8_32%,#ffffff_100%)] px-3 pb-12 pt-4 sm:px-6 sm:pb-16 sm:pt-6 lg:px-8">

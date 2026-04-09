@@ -6,6 +6,7 @@ import { assignSchema } from "@/lib/validators";
 import { sendAssignedOrderSms } from "@/lib/sms";
 import { sendAssignmentOfferedEmail } from "@/lib/email-notifications";
 import { assignmentStatuses } from "@/lib/order-assignment";
+import { revalidatePublicJobListings } from "@/lib/public-job-cache";
 import { notifyUserEvent } from "@/lib/user-event-notifications";
 
 export async function PUT(req: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -96,6 +97,7 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
       date: order.date,
     });
 
+    revalidatePublicJobListings();
     return NextResponse.json(order);
   } catch (error) {
     return handleApiError(error);

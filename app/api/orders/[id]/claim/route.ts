@@ -5,6 +5,7 @@ import { claimOrderForWorker } from "@/lib/services/order-claim-service";
 import { orderIdParamSchema } from "@/lib/validators";
 import { prisma } from "@/lib/prisma";
 import { sendWorkerAcceptedAssignmentEmail } from "@/lib/email-notifications";
+import { revalidatePublicJobListings } from "@/lib/public-job-cache";
 import { notifyUserEvent } from "@/lib/user-event-notifications";
 
 export async function PUT(req: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -55,6 +56,7 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
       });
     }
 
+    revalidatePublicJobListings();
     return NextResponse.json(order);
   } catch (error) {
     return handleApiError(error);
