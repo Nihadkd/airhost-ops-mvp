@@ -370,7 +370,7 @@ export function PublicHomePage({
 
   return (
     <main className="min-h-screen bg-[linear-gradient(180deg,#f4fbfb_0%,#eff6f8_32%,#ffffff_100%)] px-3 pb-12 pt-4 sm:px-6 sm:pb-16 sm:pt-6 lg:px-8">
-      <div className="mx-auto max-w-6xl">
+      <div className="mx-auto max-w-6xl 2xl:max-w-[1520px]">
         <header className="relative z-[80] flex flex-wrap items-center justify-between gap-3 rounded-[24px] border border-white/70 bg-white/80 px-4 py-3 shadow-[0_24px_80px_rgba(10,45,61,0.10)] backdrop-blur sm:gap-4 sm:rounded-[28px] sm:px-7 sm:py-4">
           <Link href="/" className="inline-flex items-center gap-3" aria-label="ServNest">
             <span className="inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-[linear-gradient(135deg,#0b8f7b,#12303d)] text-white shadow-lg">
@@ -439,24 +439,24 @@ export function PublicHomePage({
           )}
         </header>
 
-        <section className="relative mt-4 overflow-hidden rounded-[28px] border border-[#d7e7ea] bg-[radial-gradient(circle_at_top,#f8fffd_0%,#ecf6f7_40%,#f8fbfc_100%)] px-4 py-5 shadow-[0_28px_90px_rgba(15,48,61,0.12)] sm:mt-6 sm:rounded-[36px] sm:px-10 sm:py-12">
+        <section className="relative mt-4 overflow-hidden rounded-[28px] border border-[#d7e7ea] bg-[radial-gradient(circle_at_top,#f8fffd_0%,#ecf6f7_40%,#f8fbfc_100%)] px-4 py-5 shadow-[0_28px_90px_rgba(15,48,61,0.12)] sm:mt-6 sm:rounded-[36px] sm:px-10 sm:py-12 2xl:px-14 2xl:py-14">
           <div className="absolute -right-16 top-8 h-40 w-40 rounded-full bg-teal-200/35 blur-3xl" aria-hidden="true" />
           <div className="absolute -left-10 bottom-0 h-32 w-32 rounded-full bg-sky-200/30 blur-3xl" aria-hidden="true" />
 
-          <div className="grid gap-5 lg:grid-cols-[1.3fr_0.9fr] lg:items-center lg:gap-8">
+          <div className="grid gap-5 lg:grid-cols-[minmax(0,1.08fr)_minmax(340px,0.92fr)] lg:items-center lg:gap-8 2xl:grid-cols-[minmax(0,1.18fr)_minmax(420px,0.82fr)] 2xl:gap-10">
             <div>
               <p className="text-xs font-black uppercase tracking-[0.28em] text-teal-700">Lokale oppdrag. Rask hjelp. Trygg flyt.</p>
-              <h1 className="mt-3 max-w-3xl text-[2.35rem] font-black leading-[0.98] text-slate-900 sm:mt-4 sm:text-[4.1rem]">
+              <h1 className="mt-3 max-w-3xl text-[2.35rem] font-black leading-[0.98] text-slate-900 sm:mt-4 sm:text-[4.1rem] 2xl:max-w-[11ch] 2xl:text-[5rem]">
                 Hjelp og oppdrag, samlet på ett sted
               </h1>
-              <p className="mt-3 max-w-2xl text-[0.98rem] leading-7 text-slate-600 sm:mt-5 sm:text-lg">
+              <p className="mt-3 max-w-2xl text-[0.98rem] leading-7 text-slate-600 sm:mt-5 sm:text-lg 2xl:max-w-[52rem]">
                 Fra små oppdrag til større behov, ServNest kobler folk som trenger hjelp med folk som kan hjelpe.
               </p>
 
               <label htmlFor="public-search" className="sr-only">
                 Søk etter oppdrag
               </label>
-              <div className="mt-5 max-w-4xl sm:mt-7">
+              <div className="mt-5 max-w-4xl sm:mt-7 2xl:max-w-[52rem]">
                 <div className="panel flex items-center gap-3 rounded-[22px] border border-white/80 bg-white/96 px-3 py-2.5 shadow-[0_24px_60px_rgba(11,143,123,0.10)] sm:rounded-[28px] sm:px-6 sm:py-5">
                   <span className="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-teal-50 text-teal-700 sm:h-11 sm:w-11 sm:rounded-2xl">
                     <svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true">
@@ -492,7 +492,7 @@ export function PublicHomePage({
               ) : null}
             </div>
 
-            <div className="grid gap-3 sm:gap-4">
+            <div className="hidden gap-3 sm:grid sm:gap-4">
               <div className="rounded-[24px] border border-white/80 bg-[linear-gradient(180deg,rgba(15,48,61,0.97),rgba(11,143,123,0.94))] p-4 text-white shadow-[0_26px_60px_rgba(15,48,61,0.18)] sm:rounded-[30px] sm:p-6">
                 <p className="text-[11px] font-black uppercase tracking-[0.24em] text-white/65">Slik fungerer det</p>
                 <div className="mt-4 space-y-3 sm:mt-5 sm:space-y-4">
@@ -513,11 +513,12 @@ export function PublicHomePage({
           </div>
         </section>
 
-        <section className="mt-5 sm:mt-6">
-          <div className="max-w-4xl rounded-[24px] border border-white/80 bg-white/90 px-5 py-5 shadow-[0_18px_40px_rgba(15,48,61,0.08)] sm:px-6 sm:py-6">
-            <p className="text-xs font-black uppercase tracking-[0.24em] text-teal-700">Tjenester i hele Norge</p>
-            <h2 className="mt-3 text-2xl font-black text-slate-900 sm:text-3xl">Tjenester i hele Norge</h2>
-            <div className="mt-3 max-w-3xl space-y-3 text-base leading-7 text-slate-600 sm:text-lg">
+        <section className="mt-5 hidden sm:block sm:mt-6">
+          <div className="rounded-[24px] border border-white/80 bg-white/90 px-5 py-5 shadow-[0_18px_40px_rgba(15,48,61,0.08)] sm:px-6 sm:py-6 xl:px-8 xl:py-7">
+            <div className="max-w-4xl xl:max-w-[62rem]">
+              <p className="text-xs font-black uppercase tracking-[0.24em] text-teal-700">Tjenester i hele Norge</p>
+              <h2 className="mt-3 text-2xl font-black text-slate-900 sm:text-3xl xl:text-[2.2rem]">Tjenester i hele Norge</h2>
+              <div className="mt-3 max-w-3xl space-y-3 text-base leading-7 text-slate-600 sm:text-lg xl:max-w-[56rem]">
               <p>
                 ServNest er en plattform hvor du kan legge ut oppdrag og finne personer som kan utføre tjenester. Her
                 kan du enkelt få hjelp til oppgaver i hverdagen, eller selv ta oppdrag og tjene penger.
@@ -526,6 +527,7 @@ export function PublicHomePage({
                 På ServNest kan du koble deg med andre for å få utført eller utføre tjenester - raskt, enkelt og
                 fleksibelt.
               </p>
+              </div>
             </div>
           </div>
 
@@ -584,7 +586,7 @@ export function PublicHomePage({
             <h2 className="mt-2 text-2xl font-black text-slate-900">Utforsk tjenester etter behov</h2>
           </div>
 
-          <div className="mt-3 grid gap-1.5 sm:mt-4 sm:grid-cols-2 lg:grid-cols-5 xl:grid-cols-6">
+          <div className="mt-3 grid gap-1.5 sm:mt-4 sm:[grid-template-columns:repeat(auto-fit,minmax(220px,1fr))] xl:gap-2">
             <button
               type="button"
               onClick={() => setSelectedType("ALL")}
