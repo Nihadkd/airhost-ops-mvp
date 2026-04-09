@@ -586,11 +586,11 @@ export function PublicHomePage({
             <h2 className="mt-2 text-2xl font-black text-slate-900">Utforsk tjenester etter behov</h2>
           </div>
 
-          <div className="mt-3 grid gap-1.5 sm:mt-4 sm:[grid-template-columns:repeat(auto-fit,minmax(220px,1fr))] xl:gap-2">
+          <div className="-mx-1 mt-3 flex snap-x snap-mandatory gap-2 overflow-x-auto px-1 pb-1 sm:mx-0 sm:mt-4 sm:grid sm:gap-1.5 sm:overflow-visible sm:px-0 sm:pb-0 sm:[grid-template-columns:repeat(auto-fit,minmax(220px,1fr))] xl:gap-2">
             <button
               type="button"
               onClick={() => setSelectedType("ALL")}
-              className={`rounded-[14px] border px-2.5 py-2 text-left transition sm:rounded-[16px] sm:px-3 sm:py-2.5 ${
+              className={`min-w-[176px] shrink-0 snap-start rounded-[14px] border px-3 py-3 text-left transition sm:min-w-0 sm:rounded-[16px] sm:px-3 sm:py-2.5 ${
                 selectedType === "ALL"
                   ? "border-slate-900 bg-slate-900 text-white shadow-[0_18px_36px_rgba(15,23,42,0.18)]"
                   : "border-white/80 bg-white/90 text-slate-700 shadow-[0_16px_32px_rgba(15,48,61,0.07)] hover:border-teal-300 hover:text-teal-700"
@@ -601,28 +601,28 @@ export function PublicHomePage({
                   <path d="M4 12h16M12 4v16" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
                 </svg>
               </span>
-              <p className="mt-1 text-[0.86rem] font-black sm:mt-1.5 sm:text-[0.92rem]">Alle tjenester</p>
-              <p className={`mt-0.5 text-[0.74rem] sm:text-[0.8rem] ${selectedType === "ALL" ? "text-white/78" : "text-slate-500"}`}>Se hele markedet</p>
+              <p className="mt-2 text-[0.92rem] font-black leading-tight sm:mt-1.5 sm:text-[0.92rem]">Alle tjenester</p>
+              <p className={`mt-0.5 hidden text-[0.74rem] sm:block sm:text-[0.8rem] ${selectedType === "ALL" ? "text-white/78" : "text-slate-500"}`}>Se hele markedet</p>
             </button>
             {categories.map((category) =>
               category.type === "KEY_HANDLING" ? (
                 <Link
                   key={category.type}
                   href="/airbnb"
-                  className="rounded-[14px] border border-white/80 bg-white/90 px-2.5 py-2 text-left text-slate-700 shadow-[0_16px_32px_rgba(15,48,61,0.07)] transition hover:border-teal-300 hover:text-teal-700 sm:rounded-[16px] sm:px-3 sm:py-2.5"
+                  className="min-w-[176px] shrink-0 snap-start rounded-[14px] border border-white/80 bg-white/90 px-3 py-3 text-left text-slate-700 shadow-[0_16px_32px_rgba(15,48,61,0.07)] transition hover:border-teal-300 hover:text-teal-700 sm:min-w-0 sm:rounded-[16px] sm:px-3 sm:py-2.5"
                 >
                   <span className="inline-flex h-11 w-11 items-center justify-center rounded-[16px] bg-teal-100 text-teal-950 ring-1 ring-teal-200 sm:h-12 sm:w-12 sm:rounded-[18px]">
                     <CategoryIcon type={category.type} />
                   </span>
-                  <p className="mt-1 text-[0.86rem] font-black sm:mt-1.5 sm:text-[0.92rem]">{category.label}</p>
-                  <p className="mt-1 text-sm text-slate-500">Åpne Airbnb-siden</p>
+                  <p className="mt-2 text-[0.92rem] font-black leading-tight sm:mt-1.5 sm:text-[0.92rem]">{category.label}</p>
+                  <p className="mt-1 hidden text-sm text-slate-500 sm:block">Åpne Airbnb-siden</p>
                 </Link>
               ) : (
                 <button
                   key={category.type}
                   type="button"
                   onClick={() => setSelectedType(category.type)}
-                  className={`rounded-[14px] border px-2.5 py-2 text-left transition sm:rounded-[16px] sm:px-3 sm:py-2.5 ${
+                  className={`min-w-[176px] shrink-0 snap-start rounded-[14px] border px-3 py-3 text-left transition sm:min-w-0 sm:rounded-[16px] sm:px-3 sm:py-2.5 ${
                     selectedType === category.type
                       ? "border-teal-700 bg-teal-700 text-white shadow-[0_18px_36px_rgba(11,143,123,0.18)]"
                       : "border-white/80 bg-white/90 text-slate-700 shadow-[0_16px_32px_rgba(15,48,61,0.07)] hover:border-teal-300 hover:text-teal-700"
@@ -631,8 +631,8 @@ export function PublicHomePage({
                   <span className={`inline-flex h-11 w-11 items-center justify-center rounded-[16px] sm:h-12 sm:w-12 sm:rounded-[18px] ${selectedType === category.type ? "bg-white/12 text-white" : "bg-teal-100 text-teal-950 ring-1 ring-teal-200"}`}>
                     <CategoryIcon type={category.type} />
                   </span>
-                  <p className="mt-1 text-[0.86rem] font-black sm:mt-1.5 sm:text-[0.92rem]">{category.label}</p>
-                  <p className={`mt-0.5 text-[0.74rem] sm:text-[0.8rem] ${selectedType === category.type ? "text-white/80" : "text-slate-500"}`}>
+                  <p className="mt-2 text-[0.92rem] font-black leading-tight sm:mt-1.5 sm:text-[0.92rem]">{category.label}</p>
+                  <p className={`mt-0.5 hidden text-[0.74rem] sm:block sm:text-[0.8rem] ${selectedType === category.type ? "text-white/80" : "text-slate-500"}`}>
                     Filtrer oppdrag i denne kategorien
                   </p>
                 </button>
@@ -640,7 +640,7 @@ export function PublicHomePage({
             )}
           </div>
 
-          <div className="mt-4 rounded-[20px] border border-white/80 bg-white/90 px-4 py-4 shadow-[0_16px_32px_rgba(15,48,61,0.07)] sm:px-5">
+          <div className="mt-4 hidden rounded-[20px] border border-white/80 bg-white/90 px-4 py-4 shadow-[0_16px_32px_rgba(15,48,61,0.07)] sm:block sm:px-5">
             <p className="text-sm text-slate-600">
               Vil du lese mer om hver tjeneste? Vi har laget egne sider for blant annet sma reparasjoner, rengjoring,
               flyttehjelp, hagearbeid og Airbnb-tjenester.
